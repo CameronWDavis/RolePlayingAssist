@@ -18,7 +18,8 @@ Then open http://localhost:5173.
 
 - **Compendium**: 319 spells, 334 monsters, 239 magic items, 237 pieces of equipment, 12 classes, 9 races, 15 conditions. Search and filters; clickable dice in monster stat blocks.
 - **Dice roller**: d4 to d100 pools, modifiers, advantage/disadvantage, `4d6kh3`-style expressions, roll history. A floating d20 button opens the tray on every page.
-- **Character sheet**: race/subrace, class, level 1–20, ability scores (standard array or 4d6 rolls), saves, skills with expertise, HP/temp HP/death saves/hit dice/long rest, AC from worn armor and shield, weapon attacks, spell slots and spell list, inventory and coins, features and traits, notes. Import/export as JSON.
+- **Character sheet**: race/subrace, class, subclass, level 1–20, ability scores (standard array or 4d6 rolls), saves, skills with expertise, HP/temp HP/death saves/hit dice/long rest, AC from worn armor and shield, weapon attacks, spell slots and spell list, inventory and coins, features and traits, notes. Import/export as JSON.
+- **Homebrew**: create magic items, spells, monsters and subclasses with a live preview. They appear in the compendium (with a Source filter and an HB tag) and in the character sheet's spell, item and subclass pickers. Any SRD entry can be copied as a starting point. Export/import homebrew packs (`.json`) to share with your table; re-importing a pack updates entries instead of duplicating them.
 
 ## Project layout
 
@@ -32,5 +33,9 @@ Then open http://localhost:5173.
 
 All game content comes from the System Reference Document 5.1 by Wizards of the Coast LLC, licensed under
 [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/legalcode). The required attribution is in the site footer.
+
+The JSON version of that content comes from [5e-database](https://github.com/5e-bits/5e-database) by Adrian Padua,
+Christopher Ward and contributors, used under the MIT License. Its license text is kept in
+[data-raw/LICENSE-5e-database.md](data-raw/LICENSE-5e-database.md).
 Don't add non-SRD material (other subclasses, named settings, product-identity monsters) to the built-in data.
 That belongs in user-created homebrew instead.

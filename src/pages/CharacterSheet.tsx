@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useCharacters } from '../components/CharacterStore';
 import { useDice } from '../components/Dice';
+import { useHomebrew } from '../components/HomebrewStore';
 import { ABILITIES, ABILITY_NAMES, type Ability, backgrounds, classes, equipment, races, skillById } from '../data';
 import { type Character, derive, fmtMod } from '../lib/character';
 import { downloadCharacter } from './Characters';
@@ -65,8 +66,13 @@ export default function CharacterSheet() {
 export type SetCharacter = (patch: Partial<Character> | ((c: Character) => Partial<Character>)) => void;
 
 function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete: () => void }) {
-  const d = derive(c);
+  const hb = useHomebrew();
+  const location = useLocation();
+  const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
+  const d = derive(c, hb.data.subclasses);
   const { roll } = useDice();
+  const srdSubclass = d.cls?.subclasses[0];
+  const homebrewSubclasses = hb.subclassesFor(c.classId);
   const [amount, setAmount] = useState('');
   const hp = c.hpCurrent < 0 ? d.hpMax : Math.min(c.hpCurrent, d.hpMax);
   const hd = d.cls?.hitDie ?? 8;
@@ -145,6 +151,12 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
 
   return (
     <div className="page sheet">
+      {notice && (
+        <div className="banner ok" role="status">
+          {notice}
+          <button className="icon-btn" onClick={() => setNotice(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       {/* ---------- Header ---------- */}
       <header className="sheet-head panel">
         <div className="avatar big" aria-hidden="true">{c.name.trim().charAt(0).toUpperCase() || '?'}</div>
@@ -152,11 +164,11 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
           <input className="name-input" value={c.name} onChange={(e) => set({ name: e.target.value })} aria-label="Character name" />
           <div className="muted">
             Level {c.level} {d.subrace?.name ?? d.race?.name} {d.cls?.name}
-            {d.cls?.subclasses[0] && c.level >= (d.cls.subclasses[0].features[0]?.level ?? 3) && ` · ${d.cls.subclasses[0].name}`}
+            {d.subclass && ` · ${d.subclass.name}`}
           </div>
         </div>
         <div className="actions">
-          <button className="btn" onClick={() => downloadCharacter(c)}>Export</button>
+          <button className="btn" onClick={() => downloadCharacter(c, hb.data)}>Export</button>
           <button className="btn danger" onClick={onDelete}>Delete</button>
         </div>
       </header>
@@ -188,9 +200,27 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
           Class
           <select
             value={c.classId}
-            onChange={(e) => set({ classId: e.target.value, skillProfs: [], expertise: [], slotsUsed: [0, 0, 0, 0, 0, 0, 0, 0, 0] })}
+            onChange={(e) =>
+              set({ classId: e.target.value, subclassId: '', skillProfs: [], expertise: [], slotsUsed: [0, 0, 0, 0, 0, 0, 0, 0, 0] })
+            }
           >
             {classes.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
+          </select>
+        </label>
+        <label>
+          {srdSubclass?.flavor || 'Subclass'}
+          <select value={c.subclassId} onChange={(e) => set({ subclassId: e.target.value })}>
+            <option value="">None yet</option>
+            {srdSubclass && <option value="srd">{srdSubclass.name}</option>}
+            {homebrewSubclasses.length > 0 && (
+              <optgroup label="Homebrew">
+                {homebrewSubclasses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </optgroup>
+            )}
+            {/* Keep a deleted homebrew choice visible instead of silently showing "None". */}
+            {c.subclassId && c.subclassId !== 'srd' && !homebrewSubclasses.some((s) => s.id === c.subclassId) && (
+              <option value={c.subclassId}>(deleted homebrew)</option>
+            )}
           </select>
         </label>
         <label>

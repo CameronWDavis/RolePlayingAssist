@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { RichText } from '../../components/RichText';
 import { useDice } from '../../components/Dice';
 import {
@@ -7,7 +8,9 @@ import {
   type Condition,
   type DndClass,
   type Equipment,
+  type HomebrewSubclass,
   type MagicItem,
+  type Subclass,
   type Monster,
   type NamedBlock,
   type Race,
@@ -239,7 +242,7 @@ export function RaceDetail({ race }: { race: Race }) {
   );
 }
 
-export function ClassDetail({ cls }: { cls: DndClass }) {
+export function ClassDetail({ cls, homebrew = [] }: { cls: DndClass; homebrew?: HomebrewSubclass[] }) {
   const slotCols = cls.levels.some((l) => l.slots?.some((n) => n > 0))
     ? Math.max(...cls.levels.map((l) => (l.slots ? l.slots.reduce((m, n, i) => (n > 0 ? i + 1 : m), 0) : 0)))
     : 0;
@@ -300,10 +303,17 @@ export function ClassDetail({ cls }: { cls: DndClass }) {
         </details>
       ))}
 
-      {cls.subclasses.map((s) => (
-        <section key={s.name}>
+      {[...cls.subclasses, ...homebrew].map((s: Subclass & Partial<HomebrewSubclass>) => (
+        <section key={s.id ?? s.name}>
           <h3 className="rule">
-            {s.flavor}: {s.name}
+            {s.flavor ? `${s.flavor}: ` : ''}
+            {s.name}
+            {s.homebrew && (
+              <>
+                <span className="mini-tag hb">HB</span>{' '}
+                <Link className="link-btn small" to={`/homebrew/subclasses/${s.id}`}>Edit</Link>
+              </>
+            )}
           </h3>
           <RichText text={s.desc} />
           {s.features.map((f) => (
@@ -318,7 +328,7 @@ export function ClassDetail({ cls }: { cls: DndClass }) {
         </section>
       ))}
       <p className="muted small">
-        Only one subclass per class is part of the free SRD. You'll be able to add others as homebrew in a later version.
+        Only one subclass per class is part of the free SRD. Use the buttons above to make your own.
       </p>
     </article>
   );

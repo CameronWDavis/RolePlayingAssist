@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useCharacters } from './components/CharacterStore';
 import { DicePanel, DiceTray, DieIcon } from './components/Dice';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { classes, magicItems, monsters, spells } from './data';
 import CharacterSheet from './pages/CharacterSheet';
 import Characters from './pages/Characters';
 import Compendium from './pages/Compendium';
+import HomebrewEdit from './pages/homebrew/HomebrewEdit';
+import HomebrewHome from './pages/homebrew/HomebrewHome';
+import { useHomebrew } from './components/HomebrewStore';
+import { countHomebrew } from './lib/homebrew';
 
 export default function App() {
   const location = useLocation();
@@ -29,11 +34,14 @@ export default function App() {
         <nav className={`main-nav ${menuOpen ? 'open' : ''}`}>
           <NavLink to="/characters">Characters</NavLink>
           <NavLink to="/compendium">Compendium</NavLink>
+          <NavLink to="/homebrew">Homebrew</NavLink>
           <NavLink to="/dice">Dice</NavLink>
         </nav>
       </header>
 
       <main>
+        {/* Moving to another page clears a crash, so one broken page never locks up the whole app. */}
+        <ErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/characters" element={<Characters />} />
@@ -41,9 +49,12 @@ export default function App() {
           <Route path="/compendium" element={<Navigate to="/compendium/spells" replace />} />
           <Route path="/compendium/:category" element={<Compendium />} />
           <Route path="/compendium/:category/:id" element={<Compendium />} />
+          <Route path="/homebrew" element={<HomebrewHome />} />
+          <Route path="/homebrew/:kind/:id" element={<HomebrewEdit />} />
           <Route path="/dice" element={<DicePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </main>
 
       <footer className="footer">
@@ -56,7 +67,11 @@ export default function App() {
           <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noreferrer">
             CC-BY-4.0
           </a>
-          . Grimoire is a fan-made tool and is not affiliated with or endorsed by Wizards of the Coast.
+          . Data prepared by the{' '}
+          <a href="https://github.com/5e-bits/5e-database" target="_blank" rel="noreferrer">
+            5e-database
+          </a>{' '}
+          project (MIT License). Grimoire is a fan-made tool and is not affiliated with or endorsed by Wizards of the Coast.
         </p>
       </footer>
 
@@ -67,6 +82,7 @@ export default function App() {
 
 function Home() {
   const { characters, create } = useCharacters();
+  const hb = useHomebrew();
   const navigate = useNavigate();
   const recent = characters.slice(0, 3);
   return (
@@ -100,6 +116,11 @@ function Home() {
             equipment and conditions.
           </p>
           <span className="muted small">Search and filter everything</span>
+        </Link>
+        <Link to="/homebrew" className="feature-card">
+          <h2>Homebrew</h2>
+          <p>Make your own magic items, spells, monsters and subclasses, then use them on character sheets and share them as packs.</p>
+          <span className="muted small">{countHomebrew(hb.data)} created</span>
         </Link>
         <Link to="/dice" className="feature-card">
           <h2>Dice</h2>

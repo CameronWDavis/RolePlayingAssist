@@ -4,7 +4,9 @@ import {
   type Ability,
   type DndClass,
   type Equipment,
+  type HomebrewSubclass,
   type Race,
+  type Subclass,
   type Subrace,
   backgrounds,
   classById,
@@ -12,6 +14,7 @@ import {
   raceById,
   skills,
 } from '../data';
+import { type HomebrewData, cleanHomebrew, countHomebrew, homebrewUsedBy } from './homebrew';
 import { load, save } from './storage';
 
 export interface InventoryItem {
@@ -31,6 +34,8 @@ export interface Character {
   raceId: string;
   subraceId: string;
   classId: string;
+  /** '' = none chosen, 'srd' = the class's SRD subclass, otherwise a homebrew subclass id. */
+  subclassId: string;
   level: number;
   backgroundId: string;
   alignment: string;
@@ -73,6 +78,7 @@ export function createCharacter(): Character {
     raceId: 'human',
     subraceId: '',
     classId: 'fighter',
+    subclassId: '',
     level: 1,
     backgroundId: 'acolyte',
     alignment: 'Neutral Good',
@@ -100,31 +106,125 @@ export function createCharacter(): Character {
   };
 }
 
-/** Fills in fields that older saved characters may be missing. */
-function normalize(c: Partial<Character>): Character {
+// ---------- Validation ----------
+// Saved and imported characters are checked field by field, so a hand-edited or
+// corrupted file falls back to sensible defaults instead of crashing the sheet.
+
+type Loose = Record<string, unknown>;
+const isObj = (v: unknown): v is Loose => !!v && typeof v === 'object' && !Array.isArray(v);
+const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v : fallback);
+const int = (v: unknown, fallback: number, min: number, max: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback;
+const strList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+function cleanInventory(v: unknown): InventoryItem[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter(isObj).flatMap((i) => {
+    const name = str(i.name, '').trim();
+    if (!name) return [];
+    const source = i.source === 'equipment' || i.source === 'magic' ? i.source : 'custom';
+    return [
+      {
+        key: str(i.key, newId()),
+        refId: typeof i.refId === 'string' ? i.refId : undefined,
+        source,
+        name,
+        qty: int(i.qty, 1, 1, 9999),
+        notes: typeof i.notes === 'string' ? i.notes : undefined,
+      },
+    ];
+  });
+}
+
+/** Turns anything that looks roughly like a character into a valid Character. */
+function normalize(raw: unknown): Character {
   const base = createCharacter();
+  const c = isObj(raw) ? raw : {};
+  const scores = isObj(c.baseScores) ? c.baseScores : {};
+  const ds = isObj(c.deathSaves) ? c.deathSaves : {};
+  const coins = isObj(c.currency) ? c.currency : {};
+  const raceId = str(c.raceId, base.raceId);
+  const classId = str(c.classId, base.classId);
+  const slots = Array.isArray(c.slotsUsed) ? c.slotsUsed : [];
+  const level = int(c.level, 1, 1, 20);
   return {
-    ...base,
-    ...c,
-    baseScores: { ...base.baseScores, ...c.baseScores },
-    deathSaves: { ...base.deathSaves, ...c.deathSaves },
-    currency: { ...base.currency, ...c.currency },
-  } as Character;
+    id: str(c.id, base.id),
+    name: str(c.name, base.name),
+    playerName: str(c.playerName, ''),
+    raceId: raceById.has(raceId) ? raceId : base.raceId,
+    subraceId: str(c.subraceId, ''),
+    classId: classById.has(classId) ? classId : base.classId,
+    // Characters saved before subclasses were selectable showed the SRD one once they reached
+    // the level that grants it, so files without the field keep that behaviour.
+    subclassId: str(
+      c.subclassId,
+      c.subclassId === undefined && level >= (classById.get(classId)?.subclasses[0]?.features[0]?.level ?? 99) ? 'srd' : '',
+    ),
+    level,
+    backgroundId: str(c.backgroundId, ''),
+    alignment: str(c.alignment, base.alignment),
+    baseScores: Object.fromEntries(ABILITIES.map((a) => [a, int(scores[a], base.baseScores[a], 1, 30)])) as Record<Ability, number>,
+    skillProfs: strList(c.skillProfs),
+    expertise: strList(c.expertise),
+    hpCurrent: int(c.hpCurrent, -1, -1, 9999),
+    hpTemp: int(c.hpTemp, 0, 0, 9999),
+    hpBonus: int(c.hpBonus, 0, -999, 999),
+    hitDiceUsed: int(c.hitDiceUsed, 0, 0, level),
+    armorId: str(c.armorId, ''),
+    shield: c.shield === true,
+    acBonus: int(c.acBonus, 0, -99, 99),
+    deathSaves: { success: int(ds.success, 0, 0, 3), fail: int(ds.fail, 0, 0, 3) },
+    inspiration: c.inspiration === true,
+    conditions: strList(c.conditions),
+    slotsUsed: Array.from({ length: 9 }, (_, i) => int(slots[i], 0, 0, 99)),
+    spells: strList(c.spells),
+    inventory: cleanInventory(c.inventory),
+    currency: {
+      cp: int(coins.cp, 0, 0, 1e9),
+      sp: int(coins.sp, 0, 0, 1e9),
+      gp: int(coins.gp, 0, 0, 1e9),
+      pp: int(coins.pp, 0, 0, 1e9),
+    },
+    notes: str(c.notes, ''),
+    createdAt: int(c.createdAt, base.createdAt, 0, Number.MAX_SAFE_INTEGER),
+    updatedAt: int(c.updatedAt, base.updatedAt, 0, Number.MAX_SAFE_INTEGER),
+  };
 }
 
 export function loadCharacters(): Character[] {
-  const list = load<Partial<Character>[]>(STORAGE_KEY, []);
-  return Array.isArray(list) ? list.map(normalize) : [];
+  const list = load<unknown>(STORAGE_KEY, []);
+  return Array.isArray(list) ? list.filter(isObj).map(normalize) : [];
 }
 
 export function saveCharacters(list: Character[]): boolean {
   return save(STORAGE_KEY, list);
 }
 
-export function importCharacter(json: string): Character {
-  const parsed = JSON.parse(json) as Partial<Character>;
-  if (!parsed || typeof parsed !== 'object' || !parsed.name) throw new Error('Not a character file');
-  return normalize({ ...parsed, id: newId(), updatedAt: Date.now() });
+/**
+ * A character export file: the character's own fields at the top level (so older exports still
+ * import), plus the homebrew it uses so a friend's copy isn't missing its subclass, spells or items.
+ */
+export type CharacterFile = Character & { format: 'grimoire-character'; homebrew?: HomebrewData };
+
+export function makeCharacterFile(c: Character, homebrew: HomebrewData): CharacterFile {
+  const used = homebrewUsedBy(c, homebrew);
+  return { format: 'grimoire-character', ...c, ...(countHomebrew(used) ? { homebrew: used } : {}) };
+}
+
+export function importCharacter(json: string): { character: Character; homebrew: HomebrewData } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("That file isn't valid JSON.");
+  }
+  if (!isObj(parsed) || typeof parsed.name !== 'string' || (parsed.classId === undefined && parsed.raceId === undefined)) {
+    throw new Error("That file doesn't look like a Grimoire character export.");
+  }
+  return {
+    character: normalize({ ...parsed, id: newId(), updatedAt: Date.now() }),
+    homebrew: cleanHomebrew(parsed.homebrew),
+  };
 }
 
 // ---------- Derived stats ----------
@@ -137,6 +237,7 @@ export interface Derived {
   race?: Race;
   subrace?: Subrace;
   cls?: DndClass;
+  subclass?: Subclass & { homebrew?: boolean };
   armor?: Equipment;
   scores: Record<Ability, number>;
   mods: Record<Ability, number>;
@@ -156,10 +257,14 @@ export interface Derived {
   spellAttack: number | null;
 }
 
-export function derive(c: Character): Derived {
+export function derive(c: Character, homebrewSubclasses: HomebrewSubclass[] = []): Derived {
   const race = raceById.get(c.raceId);
   const subrace = race?.subraces.find((s) => s.id === c.subraceId);
   const cls = classById.get(c.classId);
+  const subclass =
+    c.subclassId === 'srd'
+      ? cls?.subclasses[0]
+      : homebrewSubclasses.find((s) => s.id === c.subclassId && s.classId === c.classId);
   const armor = c.armorId ? equipmentById.get(c.armorId) : undefined;
   const level = Math.min(20, Math.max(1, c.level));
 
@@ -224,6 +329,7 @@ export function derive(c: Character): Derived {
     race,
     subrace,
     cls,
+    subclass,
     armor,
     scores,
     mods,
@@ -249,10 +355,18 @@ export function weaponProficient(cls: DndClass | undefined, weapon: Equipment): 
   if (!cls || !weapon.weapon) return false;
   const profs = cls.proficiencies.map((p) => p.toLowerCase());
   if (profs.includes(`${weapon.weapon.category.toLowerCase()} weapons`)) return true;
-  // Specific weapons are listed in plural ("Longswords", "Crossbows, light").
-  const singular = (s: string) => s.replace(/s\b/g, '').replace(/[^a-z]/g, '');
-  const name = singular(weapon.name.toLowerCase());
-  return profs.some((p) => singular(p) === name);
+  // Specific weapons are listed in plural and sometimes in a different word order than the
+  // equipment name ("Hand crossbows" vs "Crossbow, hand"), so compare the sorted singular words.
+  const key = (s: string) =>
+    s
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter(Boolean)
+      .map((w) => w.replace(/s$/, ''))
+      .sort()
+      .join(' ');
+  const name = key(weapon.name);
+  return profs.some((p) => key(p) === name);
 }
 
 export function weaponAttack(d: Derived, weapon: Equipment) {

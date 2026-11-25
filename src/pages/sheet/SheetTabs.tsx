@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDice } from '../../components/Dice';
+import { useHomebrew } from '../../components/HomebrewStore';
 import { Picker, type PickerOption } from '../../components/Picker';
 import { RichText } from '../../components/RichText';
 import {
@@ -9,10 +10,6 @@ import {
   conditions,
   equipment,
   equipmentById,
-  magicItemById,
-  magicItems,
-  spellById,
-  spells,
   type Feature,
   type NamedBlock,
 } from '../../data';
@@ -165,6 +162,7 @@ function ActionsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter
 
 function SpellsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter }) {
   const { roll } = useDice();
+  const hb = useHomebrew();
   const [picking, setPicking] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const className = d.cls?.name ?? '';
@@ -172,14 +170,18 @@ function SpellsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter 
 
   const options = useMemo<PickerOption[]>(
     () =>
-      spells
+      hb.allSpells
         .filter((s) => showAll || (s.classes.includes(className) && s.level <= d.maxSpellLevel))
         .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-        .map((s) => ({ id: s.id, name: s.name, meta: `${s.level === 0 ? 'Cantrip' : ordinal(s.level)} · ${s.school}` })),
-    [showAll, className, d.maxSpellLevel],
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          meta: `${s.level === 0 ? 'Cantrip' : ordinal(s.level)} · ${s.school}${s.homebrew ? ' · Homebrew' : ''}`,
+        })),
+    [hb.allSpells, showAll, className, d.maxSpellLevel],
   );
 
-  const known = c.spells.map((id) => spellById.get(id)).filter((s): s is NonNullable<typeof s> => !!s);
+  const known = c.spells.map((id) => hb.getSpell(id)).filter((s): s is NonNullable<typeof s> => !!s);
   const byLevel = Array.from({ length: 10 }, (_, lvl) => known.filter((s) => s.level === lvl));
 
   if (!d.spellAbility) {
@@ -259,6 +261,7 @@ function SpellsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter 
                     {s.name}
                     {s.concentration && <span className="mini-tag" title="Concentration">C</span>}
                     {s.ritual && <span className="mini-tag" title="Ritual">R</span>}
+                    {s.homebrew && <span className="mini-tag hb" title="Homebrew">HB</span>}
                   </span>
                   <span className="muted small">{s.castingTime} · {s.range}</span>
                 </summary>
@@ -296,13 +299,23 @@ function SpellsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter 
 
 // ---------- Inventory ----------
 
-const itemOptions: PickerOption[] = [
-  ...equipment.map((e) => ({ id: `equipment:${e.id}`, name: e.name, meta: [e.subcategory || e.category, e.cost].join(' · ') })),
-  ...magicItems.map((m) => ({ id: `magic:${m.id}`, name: m.name, meta: `Magic · ${m.rarity}` })),
-].sort((a, b) => a.name.localeCompare(b.name));
+const equipmentOptions: PickerOption[] = equipment.map((e) => ({
+  id: `equipment:${e.id}`,
+  name: e.name,
+  meta: [e.subcategory || e.category, e.cost].join(' · '),
+}));
 
 function InventoryTab({ c, set }: { c: Character; set: SetCharacter }) {
+  const hb = useHomebrew();
   const [picking, setPicking] = useState(false);
+  const itemOptions = useMemo(
+    () =>
+      [
+        ...equipmentOptions,
+        ...hb.allMagicItems.map((m) => ({ id: `magic:${m.id}`, name: m.name, meta: `Magic · ${m.rarity}${m.homebrew ? ' · Homebrew' : ''}` })),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
+    [hb.allMagicItems],
+  );
   const [customName, setCustomName] = useState('');
 
   const weight = c.inventory.reduce((sum, i) => {
@@ -350,7 +363,7 @@ function InventoryTab({ c, set }: { c: Character; set: SetCharacter }) {
         <ul className="inventory">
           {c.inventory.map((i) => {
             const eq = i.source === 'equipment' && i.refId ? equipmentById.get(i.refId) : undefined;
-            const mi = i.source === 'magic' && i.refId ? magicItemById.get(i.refId) : undefined;
+            const mi = i.source === 'magic' && i.refId ? hb.getMagicItem(i.refId) : undefined;
             const isArmor = eq?.armor && eq.armor.category !== 'Shield';
             const isShield = eq?.armor?.category === 'Shield';
             const worn = (isArmor && c.armorId === eq!.id) || (isShield && c.shield);
@@ -360,7 +373,13 @@ function InventoryTab({ c, set }: { c: Character; set: SetCharacter }) {
                 <div className="grow">
                   {link ? <Link to={link}>{i.name}</Link> : i.name}
                   <div className="muted small">
-                    {eq ? [eq.detail, eq.weight ? `${eq.weight} lb.` : ''].filter(Boolean).join(' · ') : mi ? `${mi.rarity}${mi.attunement ? ' · attunement' : ''}` : 'Custom item'}
+                    {eq
+                      ? [eq.detail, eq.weight ? `${eq.weight} lb.` : ''].filter(Boolean).join(' · ')
+                      : mi
+                        ? `${mi.rarity}${mi.attunement ? ' · attunement' : ''}${mi.homebrew ? ' · homebrew' : ''}`
+                        : i.source === 'magic'
+                          ? 'Homebrew item (deleted)'
+                          : 'Custom item'}
                   </div>
                 </div>
                 {(isArmor || isShield) && (
@@ -423,13 +442,16 @@ function FeatureList({ title, items }: { title: string; items: (NamedBlock | Fea
 }
 
 function FeaturesTab({ c, d }: { c: Character; d: Derived }) {
-  const sub = d.cls?.subclasses[0];
-  const subFeatures = sub?.features.filter((f) => f.level <= c.level) ?? [];
+  const sub = d.subclass;
+  const subFeatures = (sub?.features.filter((f) => f.level <= c.level) ?? []).sort((a, b) => a.level - b.level);
   const bg = backgrounds.find((b) => b.id === c.backgroundId);
   return (
     <>
       <FeatureList title={`${d.cls?.name ?? 'Class'} Features`} items={d.cls?.features.filter((f) => f.level <= c.level) ?? []} />
-      {sub && subFeatures.length > 0 && <FeatureList title={`${sub.flavor}: ${sub.name}`} items={subFeatures} />}
+      {sub && subFeatures.length > 0 && <FeatureList title={`${sub.flavor ? `${sub.flavor}: ` : ''}${sub.name}`} items={subFeatures} />}
+      {!sub && d.cls?.subclasses[0] && (
+        <p className="muted small">No {d.cls.subclasses[0].flavor.toLowerCase()} chosen yet. Pick one in the character details above.</p>
+      )}
       <FeatureList title={`${d.race?.name ?? 'Race'} Traits`} items={d.race?.traits ?? []} />
       {d.subrace && <FeatureList title={`${d.subrace.name} Traits`} items={d.subrace.traits} />}
       {bg?.feature && <FeatureList title={`Background: ${bg.name}`} items={[bg.feature]} />}

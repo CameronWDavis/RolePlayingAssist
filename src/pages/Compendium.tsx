@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { useHomebrew } from '../components/HomebrewStore';
+import type { HomebrewData } from '../lib/homebrew';
 import { Link, NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   classes,
@@ -26,6 +28,7 @@ import {
   SpellDetail,
   ordinal,
 } from './compendium/Details';
+import { DetailActions } from './compendium/DetailActions';
 
 interface Base {
   id: string;
@@ -56,16 +59,32 @@ const byName = (a: Base, b: Base) => a.name.localeCompare(b.name);
 
 const RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary', 'Artifact', 'Varies'];
 
-export const CATEGORIES: Category<Base>[] = [
+const sourceFilter = <T extends Base & { homebrew?: boolean }>(): Filter<T> => ({
+  key: 'source',
+  label: 'Source',
+  options: [
+    { value: 'srd', label: 'Official (SRD)' },
+    { value: 'homebrew', label: 'Homebrew' },
+  ],
+  test: (x, v) => (v === 'homebrew' ? !!x.homebrew : !x.homebrew),
+});
+const hbTag = (x: { homebrew?: boolean }) => (x.homebrew ? <span className="mini-tag hb" title="Homebrew">HB</span> : null);
+
+function buildCategories(hb: HomebrewData): Category<Base>[] {
+  const allSpells = [...spells, ...hb.spells];
+  const allMonsters = [...monsters, ...hb.monsters];
+  const allItems = [...magicItems, ...hb.magicItems];
+  return [
   define<Spell>({
     id: 'spells',
     label: 'Spells',
-    items: [...spells].sort(byName),
+    items: [...allSpells].sort(byName),
     meta: (s) => `${s.level === 0 ? 'Cantrip' : `${ordinal(s.level)} level`} · ${s.school}`,
     badge: (s) => (
       <>
         {s.concentration && <span className="mini-tag" title="Concentration">C</span>}
         {s.ritual && <span className="mini-tag" title="Ritual">R</span>}
+        {hbTag(s)}
       </>
     ),
     filters: [
@@ -75,8 +94,9 @@ export const CATEGORIES: Category<Base>[] = [
         options: Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: i === 0 ? 'Cantrip' : ordinal(i) })),
         test: (s, v) => s.level === Number(v),
       },
-      { key: 'class', label: 'Class', options: uniq(spells.flatMap((s) => s.classes)), test: (s, v) => s.classes.includes(v) },
-      { key: 'school', label: 'School', options: uniq(spells.map((s) => s.school)), test: (s, v) => s.school === v },
+      { key: 'class', label: 'Class', options: uniq(allSpells.flatMap((s) => s.classes)), test: (s, v) => s.classes.includes(v) },
+      { key: 'school', label: 'School', options: uniq(allSpells.map((s) => s.school)), test: (s, v) => s.school === v },
+      sourceFilter<Spell>(),
     ],
     sorts: [
       { key: 'name', label: 'Name', compare: byName },
@@ -87,8 +107,9 @@ export const CATEGORIES: Category<Base>[] = [
   define<Monster>({
     id: 'monsters',
     label: 'Monsters',
-    items: [...monsters].sort(byName),
+    items: [...allMonsters].sort(byName),
     meta: (m) => `CR ${m.crLabel} · ${m.size} ${m.type}`,
+    badge: hbTag,
     filters: [
       {
         key: 'cr',
@@ -105,8 +126,9 @@ export const CATEGORIES: Category<Base>[] = [
           return m.cr >= lo && m.cr <= hi;
         },
       },
-      { key: 'type', label: 'Type', options: uniq(monsters.map((m) => m.type)), test: (m, v) => m.type === v },
-      { key: 'size', label: 'Size', options: uniq(monsters.map((m) => m.size)), test: (m, v) => m.size === v },
+      { key: 'type', label: 'Type', options: uniq(allMonsters.map((m) => m.type)), test: (m, v) => m.type === v },
+      { key: 'size', label: 'Size', options: uniq(allMonsters.map((m) => m.size)), test: (m, v) => m.size === v },
+      sourceFilter<Monster>(),
     ],
     sorts: [
       { key: 'name', label: 'Name', compare: byName },
@@ -117,17 +139,22 @@ export const CATEGORIES: Category<Base>[] = [
   define<MagicItem>({
     id: 'magic-items',
     label: 'Magic Items',
-    items: [...magicItems].sort(byName),
+    items: [...allItems].sort(byName),
     meta: (m) => `${m.category} · ${m.rarity}`,
-    badge: (m) => (m.attunement ? <span className="mini-tag" title="Requires attunement">A</span> : null),
+    badge: (m) => (
+      <>
+        {m.attunement && <span className="mini-tag" title="Requires attunement">A</span>}
+        {hbTag(m)}
+      </>
+    ),
     filters: [
       {
         key: 'rarity',
         label: 'Rarity',
-        options: RARITY_ORDER.filter((r) => magicItems.some((m) => m.rarity === r)).map((r) => ({ value: r, label: r })),
+        options: RARITY_ORDER.filter((r) => allItems.some((m) => m.rarity === r)).map((r) => ({ value: r, label: r })),
         test: (m, v) => m.rarity === v,
       },
-      { key: 'category', label: 'Type', options: uniq(magicItems.map((m) => m.category)), test: (m, v) => m.category === v },
+      { key: 'category', label: 'Type', options: uniq(allItems.map((m) => m.category)), test: (m, v) => m.category === v },
       {
         key: 'attune',
         label: 'Attunement',
@@ -137,6 +164,7 @@ export const CATEGORIES: Category<Base>[] = [
         ],
         test: (m, v) => m.attunement === (v === 'yes'),
       },
+      sourceFilter<MagicItem>(),
     ],
     detail: (m) => <MagicItemDetail item={m} />,
   }),
@@ -162,7 +190,7 @@ export const CATEGORIES: Category<Base>[] = [
     items: classes,
     meta: (c) => `d${c.hitDie} hit die${c.spellcastingAbility ? ' · Spellcaster' : ''}`,
     filters: [],
-    detail: (c) => <ClassDetail cls={c} />,
+    detail: (c) => <ClassDetail cls={c} homebrew={hb.subclasses.filter((s) => s.classId === c.id)} />,
   }),
   define<Race>({
     id: 'races',
@@ -180,16 +208,19 @@ export const CATEGORIES: Category<Base>[] = [
     filters: [],
     detail: (c) => <ConditionDetail condition={c} />,
   }),
-];
+  ];
+}
 
 export default function Compendium() {
   const { category = 'spells', id } = useParams();
-  const cat = CATEGORIES.find((c) => c.id === category);
+  const hb = useHomebrew();
+  const categories = useMemo(() => buildCategories(hb.data), [hb.data]);
+  const cat = categories.find((c) => c.id === category);
   if (!cat) return <Navigate to="/compendium/spells" replace />;
   return (
     <div className="compendium">
       <nav className="cat-tabs" aria-label="Compendium sections">
-        {CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <NavLink key={c.id} to={`/compendium/${c.id}`} className={({ isActive }) => (isActive ? 'on' : '')}>
             {c.label}
             <span className="count">{c.items.length}</span>
@@ -296,6 +327,7 @@ function CategoryBrowser({ cat, selectedId }: { cat: Category<Base>; selectedId?
             <button className="btn back-btn" onClick={() => navigate(`/compendium/${cat.id}`)}>
               ← Back to {cat.label}
             </button>
+            <DetailActions category={cat.id} item={selected} />
             {cat.detail(selected)}
           </>
         ) : (

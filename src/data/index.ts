@@ -35,6 +35,7 @@ export interface Spell {
   classes: string[];
   desc: string;
   higherLevel: string;
+  homebrew?: boolean;
 }
 
 export interface NamedBlock {
@@ -70,6 +71,7 @@ export interface Monster {
   actions: NamedBlock[];
   reactions: NamedBlock[];
   legendary: NamedBlock[];
+  homebrew?: boolean;
 }
 
 export interface MagicItem {
@@ -80,6 +82,7 @@ export interface MagicItem {
   attunement: boolean;
   subtitle: string;
   desc: string;
+  homebrew?: boolean;
 }
 
 export interface Equipment {
@@ -151,7 +154,21 @@ export interface DndClass {
   spellcastingAbility: Ability | null;
   levels: ClassLevel[];
   features: Feature[];
-  subclasses: { name: string; flavor: string; desc: string; features: Feature[] }[];
+  subclasses: Subclass[];
+}
+
+export interface Subclass {
+  name: string;
+  flavor: string;
+  desc: string;
+  features: Feature[];
+}
+
+/** A user-made subclass. SRD subclasses live inside their DndClass instead. */
+export interface HomebrewSubclass extends Subclass {
+  id: string;
+  classId: string;
+  homebrew: true;
 }
 
 export interface Skill {
