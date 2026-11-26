@@ -29,6 +29,19 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    // Pages load on demand. If a new version was deployed while this tab was open, the old
+    // page files are gone and the download fails. Reloading picks up the new version.
+    if (/dynamically imported module|Importing a module script failed|Loading chunk|error loading dynamically/i.test(error.message)) {
+      return (
+        <div className="page empty-state crash" role="alert">
+          <h2>Grimoire has been updated</h2>
+          <p className="muted">A new version came out while this tab was open. Reload to get it. Your saved data is safe.</p>
+          <div className="actions center">
+            <button className="btn primary" onClick={() => window.location.reload()}>Reload</button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="page empty-state crash" role="alert">
         <h2>Something went wrong on this page</h2>

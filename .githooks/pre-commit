@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the test suite before every commit, so broken rules math never reaches GitHub
+# (and from there, the live site). In a real emergency you can skip it with:
+#   git commit --no-verify
+echo "Running tests before commit..."
+npm test --silent || {
+  echo ""
+  echo "Tests failed, so the commit was stopped. Fix the failures above and commit again."
+  exit 1
+}

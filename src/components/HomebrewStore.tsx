@@ -1,15 +1,7 @@
-// Holds the user's homebrew in memory, mirrors it to localStorage, and offers
-// merged SRD + homebrew lookups so the compendium and character sheet see both.
+// Holds the user's homebrew in memory and mirrors it to localStorage.
+// For merged SRD + homebrew spell/item lookups, use useLibrary() (it loads the big SRD lists).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import {
-  type HomebrewSubclass,
-  type MagicItem,
-  type Spell,
-  magicItemById as srdItemById,
-  magicItems as srdItems,
-  spellById as srdSpellById,
-  spells as srdSpells,
-} from '../data';
+import type { HomebrewSubclass } from '../data';
 import {
   HOMEBREW_STORAGE_KEY,
   type HomebrewData,
@@ -32,10 +24,6 @@ interface HomebrewApi {
    * file carries homebrew: your own edited copy wins over the one inside the file).
    */
   merge: (incoming: HomebrewData, opts?: { keepExisting?: boolean }) => { added: number; updated: number };
-  allSpells: Spell[];
-  allMagicItems: MagicItem[];
-  getSpell: (id: string) => Spell | undefined;
-  getMagicItem: (id: string) => MagicItem | undefined;
   subclassesFor: (classId: string) => HomebrewSubclass[];
 }
 
@@ -95,22 +83,17 @@ export function HomebrewProvider({ children }: { children: ReactNode }) {
     [data],
   );
 
-  const api = useMemo<HomebrewApi>(() => {
-    const hbSpells = new Map(data.spells.map((s) => [s.id, s]));
-    const hbItems = new Map(data.magicItems.map((m) => [m.id, m]));
-    return {
+  const api = useMemo<HomebrewApi>(
+    () => ({
       data,
       saveFailed,
       upsert,
       remove,
       merge,
-      allSpells: [...srdSpells, ...data.spells],
-      allMagicItems: [...srdItems, ...data.magicItems],
-      getSpell: (id) => srdSpellById.get(id) ?? hbSpells.get(id),
-      getMagicItem: (id) => srdItemById.get(id) ?? hbItems.get(id),
       subclassesFor: (classId) => data.subclasses.filter((s) => s.classId === classId),
-    };
-  }, [data, saveFailed, upsert, remove, merge]);
+    }),
+    [data, saveFailed, upsert, remove, merge],
+  );
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

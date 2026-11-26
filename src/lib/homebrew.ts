@@ -26,6 +26,21 @@ export const KIND_LABELS: Record<HomebrewKind, { one: string; many: string }> = 
 };
 export const KINDS = Object.keys(KIND_LABELS) as HomebrewKind[];
 
+/** URL slug ↔ storage key. Slugs match the compendium's so links feel consistent. */
+export const KIND_SLUGS: Record<string, HomebrewKind> = {
+  spells: 'spells',
+  'magic-items': 'magicItems',
+  monsters: 'monsters',
+  subclasses: 'subclasses',
+};
+export const slugFor = (kind: HomebrewKind) => Object.keys(KIND_SLUGS).find((s) => KIND_SLUGS[s] === kind)!;
+
+/** Where an entry lives in the compendium once saved. */
+export function compendiumPath(kind: HomebrewKind, entry: { id: string; classId?: string }) {
+  if (kind === 'subclasses') return `/compendium/classes/${entry.classId}`;
+  return `/compendium/${slugFor(kind)}/${entry.id}`;
+}
+
 const STORAGE_KEY = 'grimoire.homebrew.v1';
 
 export const emptyHomebrew = (): HomebrewData => ({ spells: [], magicItems: [], monsters: [], subclasses: [] });

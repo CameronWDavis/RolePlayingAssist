@@ -12,8 +12,9 @@ import {
   homebrewId,
   makePack,
   parsePack,
+  compendiumPath,
+  slugFor,
 } from '../../lib/homebrew';
-import { compendiumPath, slugFor } from './HomebrewEdit';
 
 function download(filename: string, data: unknown) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));

@@ -12,7 +12,28 @@ npm run dev
 
 Then open http://localhost:5173.
 
-`npm run build` makes a static site in `dist/` that you can host anywhere (Netlify, Vercel, GitHub Pages).
+`npm run build` makes a static site in `dist/` that you can host anywhere (Cloudflare Pages, Netlify, Vercel).
+
+## Tests
+
+```bash
+npm test
+```
+
+Runs the Vitest suite (dice parser, character math, import cleanup, homebrew packs, and sanity checks on the SRD data).
+Use `npm run test:watch` to re-run on every save.
+
+Tests run automatically in two places:
+
+- **Before every commit**, via the git hook in `.githooks/pre-commit` (enabled by `npm install`). A failing test stops the commit.
+  In a real emergency, `git commit --no-verify` skips it.
+- **Before every deploy**, because `npm run build` runs the tests first. If they fail, the build fails and the live site keeps the last good version.
+
+## Loading
+
+Pages load on demand, and the big SRD lists (spells, monsters, magic items) are in `src/data/library.ts`, which only the
+compendium, character sheet and homebrew editor import. The home page and character list stay light, so don't import
+`data/library` from anything that loads on every page (the app shell, stores, `lib/character.ts`).
 
 ## What's in v0.1
 

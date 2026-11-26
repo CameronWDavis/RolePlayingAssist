@@ -1,7 +1,7 @@
 // Buttons above a compendium entry: edit/delete your homebrew, or copy an SRD entry into homebrew.
 import { Link, useNavigate } from 'react-router-dom';
 import { useHomebrew } from '../../components/HomebrewStore';
-import { KIND_SLUGS } from '../homebrew/HomebrewEdit';
+import { KIND_SLUGS } from '../../lib/homebrew';
 
 export function DetailActions({ category, item }: { category: string; item: { id: string; name: string; homebrew?: boolean } }) {
   const hb = useHomebrew();

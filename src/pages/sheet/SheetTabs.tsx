@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDice } from '../../components/Dice';
-import { useHomebrew } from '../../components/HomebrewStore';
+import { useLibrary } from '../../components/useLibrary';
 import { Picker, type PickerOption } from '../../components/Picker';
 import { RichText } from '../../components/RichText';
 import {
@@ -162,7 +162,7 @@ function ActionsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter
 
 function SpellsTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter }) {
   const { roll } = useDice();
-  const hb = useHomebrew();
+  const hb = useLibrary();
   const [picking, setPicking] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const className = d.cls?.name ?? '';
@@ -306,7 +306,7 @@ const equipmentOptions: PickerOption[] = equipment.map((e) => ({
 }));
 
 function InventoryTab({ c, set }: { c: Character; set: SetCharacter }) {
-  const hb = useHomebrew();
+  const hb = useLibrary();
   const [picking, setPicking] = useState(false);
   const itemOptions = useMemo(
     () =>

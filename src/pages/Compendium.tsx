@@ -6,10 +6,7 @@ import {
   classes,
   conditions,
   equipment,
-  magicItems,
-  monsters,
   races,
-  spells,
   type Condition,
   type DndClass,
   type Equipment,
@@ -18,6 +15,7 @@ import {
   type Race,
   type Spell,
 } from '../data';
+import { magicItems, monsters, spells } from '../data/library';
 import {
   ClassDetail,
   ConditionDetail,

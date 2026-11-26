@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useCharacters } from './components/CharacterStore';
 import { DicePanel, DiceTray, DieIcon } from './components/Dice';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { classes, magicItems, monsters, spells } from './data';
-import CharacterSheet from './pages/CharacterSheet';
-import Characters from './pages/Characters';
-import Compendium from './pages/Compendium';
-import HomebrewEdit from './pages/homebrew/HomebrewEdit';
-import HomebrewHome from './pages/homebrew/HomebrewHome';
+import counts from './data/counts.json';
 import { useHomebrew } from './components/HomebrewStore';
+
+// Each page downloads only when it's first opened, so the home page loads fast.
+const CharacterSheet = lazy(() => import('./pages/CharacterSheet'));
+const Characters = lazy(() => import('./pages/Characters'));
+const Compendium = lazy(() => import('./pages/Compendium'));
+const HomebrewEdit = lazy(() => import('./pages/homebrew/HomebrewEdit'));
+const HomebrewHome = lazy(() => import('./pages/homebrew/HomebrewHome'));
 import { countHomebrew } from './lib/homebrew';
 
 export default function App() {
@@ -42,6 +44,7 @@ export default function App() {
       <main>
         {/* Moving to another page clears a crash, so one broken page never locks up the whole app. */}
         <ErrorBoundary resetKey={location.pathname}>
+        <Suspense fallback={<div className="page-loading" role="status">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/characters" element={<Characters />} />
@@ -54,6 +57,7 @@ export default function App() {
           <Route path="/dice" element={<DicePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </ErrorBoundary>
       </main>
 
@@ -112,7 +116,7 @@ function Home() {
         <Link to="/compendium/spells" className="feature-card">
           <h2>Compendium</h2>
           <p>
-            {spells.length} spells, {monsters.length} monsters, {magicItems.length} magic items, plus {classes.length} classes, races,
+            {counts.spells} spells, {counts.monsters} monsters, {counts.magicItems} magic items, plus {counts.classes} classes, races,
             equipment and conditions.
           </p>
           <span className="muted small">Search and filter everything</span>

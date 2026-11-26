@@ -11,10 +11,14 @@ const outDir = path.join(root, 'src', 'data');
 fs.mkdirSync(outDir, { recursive: true });
 
 const read = (name) => JSON.parse(fs.readFileSync(path.join(rawDir, `5e-SRD-${name}.json`), 'utf8'));
+const counts = {};
 const write = (name, data) => {
   fs.writeFileSync(path.join(outDir, `${name}.json`), JSON.stringify(data));
+  counts[name] = data.length;
   console.log(`${name}: ${data.length}`);
 };
+// The home page shows how much content there is without downloading all of it.
+process.on('exit', () => fs.writeFileSync(path.join(outDir, 'counts.json'), JSON.stringify(counts)));
 const names = (arr = []) => arr.map((x) => x.name);
 const joinDesc = (d) => (Array.isArray(d) ? d.join('\n\n') : d || '');
 

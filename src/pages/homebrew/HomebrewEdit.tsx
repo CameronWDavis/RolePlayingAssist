@@ -8,36 +8,21 @@ import {
   type Monster,
   type Spell,
   classById,
-  magicItemById,
-  monsters as srdMonsters,
-  spellById,
 } from '../../data';
+import { magicItemById, monsters as srdMonsters, spellById } from '../../data/library';
 import {
   type HomebrewKind,
   KIND_LABELS,
+  KIND_SLUGS,
   blankMagicItem,
   blankMonster,
   blankSpell,
   blankSubclass,
+  compendiumPath,
   homebrewId,
 } from '../../lib/homebrew';
 import { MagicItemDetail, MonsterDetail, SpellDetail } from '../compendium/Details';
 import { MagicItemEditor, MonsterEditor, SpellEditor, SubclassEditor } from './Editors';
-
-/** URL slug ↔ storage key. Slugs match the compendium's so links feel consistent. */
-export const KIND_SLUGS: Record<string, HomebrewKind> = {
-  spells: 'spells',
-  'magic-items': 'magicItems',
-  monsters: 'monsters',
-  subclasses: 'subclasses',
-};
-export const slugFor = (kind: HomebrewKind) => Object.keys(KIND_SLUGS).find((s) => KIND_SLUGS[s] === kind)!;
-
-/** Where an entry lives in the compendium once saved. */
-export function compendiumPath(kind: HomebrewKind, entry: { id: string; classId?: string }) {
-  if (kind === 'subclasses') return `/compendium/classes/${entry.classId}`;
-  return `/compendium/${slugFor(kind)}/${entry.id}`;
-}
 
 type Draft = Spell | MagicItem | Monster | HomebrewSubclass;
 
