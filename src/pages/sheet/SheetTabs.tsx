@@ -4,17 +4,18 @@ import { useDice } from '../../components/Dice';
 import { useLibrary } from '../../components/useLibrary';
 import { Picker, type PickerOption } from '../../components/Picker';
 import { RichText } from '../../components/RichText';
+import { useHomebrew } from '../../components/HomebrewStore';
 import {
   ABILITY_NAMES,
-  backgrounds,
   conditions,
   equipment,
   equipmentById,
+  feats,
   type Feature,
   type NamedBlock,
 } from '../../data';
 import { type Character, type Derived, fmtMod, newId, weaponAttack } from '../../lib/character';
-import { ordinal } from '../compendium/Details';
+import { bonusText, ordinal } from '../compendium/Details';
 import type { SetCharacter } from '../CharacterSheet';
 
 type Tab = 'actions' | 'spells' | 'inventory' | 'features' | 'notes';
@@ -41,7 +42,7 @@ export function SheetTabs({ c, d, set }: { c: Character; d: Derived; set: SetCha
         {tab === 'actions' && <ActionsTab c={c} d={d} set={set} />}
         {tab === 'spells' && <SpellsTab c={c} d={d} set={set} />}
         {tab === 'inventory' && <InventoryTab c={c} set={set} />}
-        {tab === 'features' && <FeaturesTab c={c} d={d} />}
+        {tab === 'features' && <FeaturesTab c={c} d={d} set={set} />}
         {tab === 'notes' && (
           <textarea
             className="notes"
@@ -441,10 +442,70 @@ function FeatureList({ title, items }: { title: string; items: (NamedBlock | Fea
   );
 }
 
-function FeaturesTab({ c, d }: { c: Character; d: Derived }) {
+function FeatsSection({ c, d, set }: { c: Character; d: Derived; set: SetCharacter }) {
+  const hb = useHomebrew();
+  const [picking, setPicking] = useState(false);
+  const options = useMemo<PickerOption[]>(
+    () =>
+      [...feats, ...hb.data.feats]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((f) => ({
+          id: f.id,
+          name: f.name,
+          meta: [f.prerequisite && `Requires ${f.prerequisite}`, f.homebrew && 'Homebrew'].filter(Boolean).join(' · ') || undefined,
+        })),
+    [hb.data.feats],
+  );
+  const missing = c.feats.filter((id) => !d.feats.some((f) => f.id === id));
+  const remove = (id: string) => set((ch) => ({ feats: ch.feats.filter((x) => x !== id) }));
+  return (
+    <div className="feature-group">
+      <div className="panel-head">
+        <h3>Feats</h3>
+        <button className="btn small" onClick={() => setPicking(true)}>+ Add feat</button>
+      </div>
+      {d.feats.length === 0 && missing.length === 0 && (
+        <p className="muted small">
+          No feats. The free rules include one (Grappler); you can <Link to="/homebrew/feats/new">make your own</Link>.
+        </p>
+      )}
+      {d.feats.map((f) => (
+        <details key={f.id} className="feature">
+          <summary>
+            <span>
+              {f.name}
+              {f.homebrew && <span className="mini-tag hb" title="Homebrew">HB</span>}
+            </span>
+            {f.prerequisite && <span className="muted small">Requires {f.prerequisite}</span>}
+          </summary>
+          {bonusText(f.abilityBonuses) && <p className="small"><strong>Ability Score Increase:</strong> {bonusText(f.abilityBonuses)}</p>}
+          <RichText text={f.desc} />
+          <button className="link-btn danger" onClick={() => remove(f.id)}>Remove feat</button>
+        </details>
+      ))}
+      {missing.map((id) => (
+        <div key={id} className="feature muted small">
+          Homebrew feat (deleted){' '}
+          <button className="link-btn danger" onClick={() => remove(id)}>Remove</button>
+        </div>
+      ))}
+      {picking && (
+        <Picker
+          title="Add a feat"
+          options={options}
+          isPicked={(id) => c.feats.includes(id)}
+          onPick={(o) => set((ch) => ({ feats: ch.feats.includes(o.id) ? ch.feats : [...ch.feats, o.id] }))}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function FeaturesTab({ c, d, set }: { c: Character; d: Derived; set: SetCharacter }) {
   const sub = d.subclass;
   const subFeatures = (sub?.features.filter((f) => f.level <= c.level) ?? []).sort((a, b) => a.level - b.level);
-  const bg = backgrounds.find((b) => b.id === c.backgroundId);
+  const bg = d.background;
   return (
     <>
       <FeatureList title={`${d.cls?.name ?? 'Class'} Features`} items={d.cls?.features.filter((f) => f.level <= c.level) ?? []} />
@@ -455,11 +516,14 @@ function FeaturesTab({ c, d }: { c: Character; d: Derived }) {
       <FeatureList title={`${d.race?.name ?? 'Race'} Traits`} items={d.race?.traits ?? []} />
       {d.subrace && <FeatureList title={`${d.subrace.name} Traits`} items={d.subrace.traits} />}
       {bg?.feature && <FeatureList title={`Background: ${bg.name}`} items={[bg.feature]} />}
+      <FeatsSection c={c} d={d} set={set} />
       {d.cls && (
         <div className="feature-group">
-          <h3>Proficiencies</h3>
+          <h3>Proficiencies & Languages</h3>
           <p className="small">{d.cls.proficiencies.join(', ')}</p>
-          <p className="small muted">{d.race?.languages}</p>
+          {bg?.tools && <p className="small"><strong>From {bg.name}:</strong> {bg.tools}</p>}
+          {d.race?.languages && <p className="small muted">{d.race.languages}</p>}
+          {bg?.languages && <p className="small muted">{bg.name} languages: {bg.languages}</p>}
         </div>
       )}
     </>

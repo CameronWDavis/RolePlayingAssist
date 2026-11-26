@@ -1,8 +1,9 @@
 // Sanity checks on the generated SRD data, so a bad re-run of `npm run build:data`
 // (or an upstream change in 5e-database) gets caught before it ships.
 import { describe, expect, it } from 'vitest';
-import { backgrounds, classes, conditions, equipment, races, skills } from './index';
+import { backgrounds, classes, conditions, equipment, feats, races, skillById, skills } from './index';
 import { magicItems, monsters, spells } from './library';
+import { rules } from './rules';
 import counts from './counts.json';
 
 const unique = (ids: string[]) => new Set(ids).size === ids.length;
@@ -17,6 +18,9 @@ describe('SRD data', () => {
       equipment: equipment.length,
       races: races.length,
       conditions: conditions.length,
+      backgrounds: backgrounds.length,
+      feats: feats.length,
+      rules: rules.length,
     });
   });
 
@@ -31,7 +35,7 @@ describe('SRD data', () => {
   });
 
   it('has unique ids in every list', () => {
-    for (const list of [spells, monsters, magicItems, equipment, classes, races, skills, conditions]) {
+    for (const list of [spells, monsters, magicItems, equipment, classes, races, skills, conditions, backgrounds, feats, rules]) {
       expect(unique(list.map((x) => x.id))).toBe(true);
     }
   });
@@ -74,6 +78,26 @@ describe('SRD data', () => {
   it('only lists real weapon properties', () => {
     // "Monk" is a data-only tag in the source data that build-data.mjs strips out.
     expect(equipment.some((e) => e.properties.includes('Monk'))).toBe(false);
+  });
+
+  it('has the rules chapters, each with text and no repeated title', () => {
+    expect(rules.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(rules.map((r) => r.chapter))).toEqual(
+      new Set(['Combat', 'Using Ability Scores', 'Adventuring', 'Spellcasting', 'Equipment', 'Appendix']),
+    );
+    for (const r of rules) {
+      expect(r.desc.length).toBeGreaterThan(200);
+      expect(r.desc.startsWith(`## ${r.name}`)).toBe(false);
+    }
+    expect(rules.map((r) => r.order)).toEqual(rules.map((_, i) => i));
+  });
+
+  it('gives backgrounds real skills and a feature', () => {
+    for (const b of backgrounds) {
+      expect(b.skills.length).toBeGreaterThan(0);
+      for (const s of b.skills) expect(skillById.has(s)).toBe(true);
+      expect(b.feature?.name).toBeTruthy();
+    }
   });
 
   it('describes armor so AC can be calculated', () => {

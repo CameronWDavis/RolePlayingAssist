@@ -12,7 +12,16 @@ import {
   weaponAttack,
   weaponProficient,
 } from './character';
-import { blankMagicItem, blankSpell, blankSubclass, emptyHomebrew } from './homebrew';
+import {
+  blankBackground,
+  blankFeat,
+  blankMagicItem,
+  blankRace,
+  blankSpell,
+  blankSubclass,
+  blankSubrace,
+  emptyHomebrew,
+} from './homebrew';
 
 /** A fresh character with overrides. Defaults: Human Fighter 1, scores 15/14/13/10/12/8, Acolyte. */
 const make = (patch: Partial<Character> = {}): Character => ({ ...createCharacter(), ...patch });
@@ -164,12 +173,64 @@ describe('derive: subclasses', () => {
 
   it('finds a homebrew subclass for the same class only', () => {
     const sub = { ...blankSubclass('wizard'), name: 'School of Embers' };
-    expect(derive(make({ classId: 'wizard', subclassId: sub.id }), [sub]).subclass?.name).toBe('School of Embers');
-    expect(derive(make({ classId: 'fighter', subclassId: sub.id }), [sub]).subclass).toBeUndefined();
+    expect(derive(make({ classId: 'wizard', subclassId: sub.id }), { subclasses: [sub] }).subclass?.name).toBe('School of Embers');
+    expect(derive(make({ classId: 'fighter', subclassId: sub.id }), { subclasses: [sub] }).subclass).toBeUndefined();
   });
 
   it('has no subclass when none is chosen', () => {
     expect(derive(make({ subclassId: '' })).subclass).toBeUndefined();
+  });
+});
+
+describe('derive: homebrew races, backgrounds and feats', () => {
+  const race = {
+    ...blankRace(),
+    name: 'Emberkin',
+    speed: 35,
+    abilityBonuses: { str: 2 },
+    subraces: [{ ...blankSubrace(), id: 'ashborn', name: 'Ashborn', abilityBonuses: { con: 1 } }],
+  };
+  const background = { ...blankBackground(), name: 'Keeper', skills: ['perception', 'survival'] };
+  const feat = { ...blankFeat(), name: 'Mighty', abilityBonuses: { str: 2, dex: 1 } };
+  const hb = { races: [race], backgrounds: [background], feats: [feat] };
+  const base = { str: 14, dex: 13, con: 12, int: 10, wis: 12, cha: 8 };
+
+  it('applies a homebrew race and subrace', () => {
+    const d = derive(make({ raceId: race.id, subraceId: 'ashborn', baseScores: base }), hb);
+    expect(d.race?.name).toBe('Emberkin');
+    expect(d.speed).toBe(35);
+    expect(d.scores).toMatchObject({ str: 16, con: 13, dex: 13 });
+  });
+
+  it('falls back safely when a homebrew race was deleted', () => {
+    const d = derive(make({ raceId: 'hb-gone', baseScores: base }), hb);
+    expect(d.race).toBeUndefined();
+    expect(d.speed).toBe(30);
+    expect(d.scores.str).toBe(14);
+  });
+
+  it('gives the skills of a homebrew background', () => {
+    const d = derive(make({ backgroundId: background.id }), hb);
+    expect(d.background?.name).toBe('Keeper');
+    expect(d.skills.find((s) => s.id === 'survival')).toMatchObject({ prof: 1, fromBackground: true });
+    expect(d.skills.find((s) => s.id === 'insight')!.prof).toBe(0); // no longer Acolyte
+  });
+
+  it('adds feat ability increases, but not above 20', () => {
+    const d = derive(make({ raceId: race.id, feats: [feat.id], baseScores: { ...base, str: 17 } }), hb);
+    expect(d.feats.map((f) => f.name)).toEqual(['Mighty']);
+    expect(d.scores.str).toBe(20); // 17 + 2 race = 19, feat +2 stops at 20
+    expect(d.scores.dex).toBe(14);
+  });
+
+  it('never lowers a score that is already over 20', () => {
+    const d = derive(make({ raceId: race.id, feats: [feat.id], baseScores: { ...base, str: 20 } }), hb);
+    expect(d.scores.str).toBe(22);
+  });
+
+  it('finds the SRD feat and ignores unknown feat ids', () => {
+    const d = derive(make({ feats: ['grappler', 'hb-deleted'] }));
+    expect(d.feats.map((f) => f.name)).toEqual(['Grappler']);
   });
 });
 
@@ -253,6 +314,14 @@ describe('importCharacter', () => {
     expect(imp({ name: 'B', classId: 'fighter', level: 3 }).subclassId).toBe('srd');
     expect(imp({ name: 'C', classId: 'cleric', level: 1 }).subclassId).toBe('srd');
     expect(imp({ name: 'D', classId: 'fighter', level: 5, subclassId: '' }).subclassId).toBe('');
+  });
+
+  it('keeps homebrew race ids and feats, but resets unknown SRD race ids', () => {
+    const c = imp({ name: 'H', classId: 'wizard', raceId: 'hb-emberkin', feats: ['grappler', 'grappler', 5] });
+    expect(c.raceId).toBe('hb-emberkin');
+    expect(c.feats).toEqual(['grappler']);
+    expect(imp({ name: 'I', classId: 'wizard', raceId: 'tortle' }).raceId).toBe('human');
+    expect(imp({ name: 'J', classId: 'wizard' }).feats).toEqual([]);
   });
 
   it('returns any homebrew bundled in the file, cleaned up', () => {

@@ -5,7 +5,11 @@ import { useDice } from '../../components/Dice';
 import {
   ABILITIES,
   ABILITY_NAMES,
+  type Ability,
+  type Background,
   type Condition,
+  type Feat,
+  type Rule,
   type DndClass,
   type Equipment,
   type HomebrewSubclass,
@@ -200,10 +204,60 @@ export function ConditionDetail({ condition }: { condition: Condition }) {
   );
 }
 
-const bonusText = (b: Partial<Record<string, number>>) =>
-  Object.entries(b)
-    .map(([k, v]) => `${k.toUpperCase()} +${v}`)
+/** "Strength +2, Wisdom +1" (in ability order, with minus signs for penalties). */
+export const bonusText = (b: Partial<Record<Ability, number>>) =>
+  ABILITIES.filter((a) => b[a])
+    .map((a) => `${ABILITY_NAMES[a]} ${fmtMod(b[a]!)}`)
     .join(', ');
+
+export function BackgroundDetail({ background: b }: { background: Background }) {
+  return (
+    <article className="detail">
+      <h1>{b.name}</h1>
+      <div className="subtitle">Background</div>
+      <div className="stat-grid">
+        <Stat label="Skill Proficiencies" value={b.skills.map((s) => skillById.get(s)?.name ?? s).join(', ') || 'None'} />
+        <Stat label="Tool Proficiencies" value={b.tools} />
+        <Stat label="Languages" value={b.languages} />
+        <Stat label="Equipment" value={b.equipment} />
+      </div>
+      {b.feature && (
+        <>
+          <h3 className="rule">Feature: {b.feature.name || 'Unnamed feature'}</h3>
+          <RichText text={b.feature.desc} />
+        </>
+      )}
+      <RichText text={b.desc} />
+    </article>
+  );
+}
+
+export function FeatDetail({ feat }: { feat: Feat }) {
+  const bonus = bonusText(feat.abilityBonuses);
+  return (
+    <article className="detail">
+      <h1>{feat.name}</h1>
+      <div className="subtitle">Feat</div>
+      {(feat.prerequisite || bonus) && (
+        <div className="stat-grid">
+          <Stat label="Prerequisite" value={feat.prerequisite} />
+          <Stat label="Ability Score Increase" value={bonus} />
+        </div>
+      )}
+      <RichText text={feat.desc} />
+    </article>
+  );
+}
+
+export function RuleDetail({ rule }: { rule: Rule }) {
+  return (
+    <article className="detail rule-text">
+      <h1>{rule.name}</h1>
+      <div className="subtitle">Rules · {rule.chapter}</div>
+      <RichText text={rule.desc} />
+    </article>
+  );
+}
 
 export function RaceDetail({ race }: { race: Race }) {
   return (
@@ -216,23 +270,27 @@ export function RaceDetail({ race }: { race: Race }) {
         <Stat label="Speed" value={`${race.speed} ft.`} />
       </div>
       <RichText text={race.desc} />
-      <h3 className="rule">Traits</h3>
-      {race.traits.map((t) => (
-        <div key={t.name}>
-          <h4>{t.name}</h4>
+      {race.traits.length > 0 && <h3 className="rule">Traits</h3>}
+      {race.traits.map((t, i) => (
+        <div key={i}>
+          <h4>{t.name || 'Unnamed trait'}</h4>
           <RichText text={t.desc} />
         </div>
       ))}
-      <h4>Languages</h4>
-      <p>{race.languages}</p>
+      {race.languages && (
+        <>
+          <h4>Languages</h4>
+          <p>{race.languages}</p>
+        </>
+      )}
       {race.subraces.map((s) => (
         <section key={s.id}>
-          <h3 className="rule">Subrace: {s.name}</h3>
-          <p>{s.desc}</p>
+          <h3 className="rule">Subrace: {s.name || 'Unnamed subrace'}</h3>
+          <RichText text={s.desc} />
           <Stat label="Ability Score Increase" value={bonusText(s.abilityBonuses)} />
-          {s.traits.map((t) => (
-            <div key={t.name}>
-              <h4>{t.name}</h4>
+          {s.traits.map((t, i) => (
+            <div key={i}>
+              <h4>{t.name || 'Unnamed trait'}</h4>
               <RichText text={t.desc} />
             </div>
           ))}

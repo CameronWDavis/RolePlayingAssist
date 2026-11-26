@@ -3,28 +3,38 @@ import { Link, useBlocker, useLocation, useNavigate, useParams, useSearchParams 
 import { useHomebrew } from '../../components/HomebrewStore';
 import { RichText } from '../../components/RichText';
 import {
+  type Background,
+  type Feat,
   type HomebrewSubclass,
   type MagicItem,
   type Monster,
+  type Race,
   type Spell,
+  backgroundById,
   classById,
+  featById,
+  raceById,
 } from '../../data';
 import { magicItemById, monsters as srdMonsters, spellById } from '../../data/library';
 import {
   type HomebrewKind,
   KIND_LABELS,
   KIND_SLUGS,
+  blankBackground,
+  blankFeat,
   blankMagicItem,
   blankMonster,
+  blankRace,
   blankSpell,
   blankSubclass,
+  cleanEntry,
   compendiumPath,
   homebrewId,
 } from '../../lib/homebrew';
-import { MagicItemDetail, MonsterDetail, SpellDetail } from '../compendium/Details';
-import { MagicItemEditor, MonsterEditor, SpellEditor, SubclassEditor } from './Editors';
+import { BackgroundDetail, FeatDetail, MagicItemDetail, MonsterDetail, RaceDetail, SpellDetail } from '../compendium/Details';
+import { BackgroundEditor, FeatEditor, MagicItemEditor, MonsterEditor, RaceEditor, SpellEditor, SubclassEditor } from './Editors';
 
-type Draft = Spell | MagicItem | Monster | HomebrewSubclass;
+type Draft = Spell | MagicItem | Monster | HomebrewSubclass | Race | Background | Feat;
 
 function startingDraft(kind: HomebrewKind, from: string | null, classParam: string | null): Draft {
   // "from" copies an SRD entry so you can tweak it instead of starting blank.
@@ -43,6 +53,12 @@ function startingDraft(kind: HomebrewKind, from: string | null, classParam: stri
       if (from === 'srd' && srd) return { ...blankSubclass(classId), ...structuredClone(srd), id: homebrewId(), classId, homebrew: true };
       return blankSubclass(classId, srd?.flavor ?? '');
     }
+    case 'races':
+      return copy(from ? raceById.get(from) : undefined) ?? blankRace();
+    case 'backgrounds':
+      return copy(from ? backgroundById.get(from) : undefined) ?? blankBackground();
+    case 'feats':
+      return copy(from ? featById.get(from) : undefined) ?? blankFeat();
   }
 }
 
@@ -117,7 +133,9 @@ function HomebrewEditor() {
 
   const save = () => {
     if (!canSave) return;
-    const entry = { ...draft, name: draft.name.trim(), homebrew: true } as Draft;
+    // Cleaning drops empty trait rows and unnamed subraces, and keeps the saved shape the same as an import.
+    const entry = cleanEntry(kind, { ...draft, name: draft.name.trim() });
+    if (!entry) return;
     hb.upsert(kind, entry);
     setSaved(true);
     leaving.current = true;
@@ -169,6 +187,9 @@ function HomebrewEditor() {
           {kind === 'magicItems' && <MagicItemEditor draft={draft as MagicItem} set={set} />}
           {kind === 'monsters' && <MonsterEditor draft={draft as Monster} set={set} />}
           {kind === 'subclasses' && <SubclassEditor draft={draft as HomebrewSubclass} set={set} />}
+          {kind === 'races' && <RaceEditor draft={draft as Race} set={set} />}
+          {kind === 'backgrounds' && <BackgroundEditor draft={draft as Background} set={set} />}
+          {kind === 'feats' && <FeatEditor draft={draft as Feat} set={set} />}
           <div className="editor-footer">
             {!canSave && <span className="muted small">Give it a name to save.</span>}
             <button className="btn primary" type="submit" disabled={!canSave}>
@@ -183,6 +204,9 @@ function HomebrewEditor() {
           {kind === 'magicItems' && <MagicItemDetail item={{ ...(draft as MagicItem), name: previewName }} />}
           {kind === 'monsters' && <MonsterDetail monster={{ ...(draft as Monster), name: previewName }} />}
           {kind === 'subclasses' && <SubclassPreview sub={{ ...(draft as HomebrewSubclass), name: previewName }} />}
+          {kind === 'races' && <RaceDetail race={{ ...(draft as Race), name: previewName }} />}
+          {kind === 'backgrounds' && <BackgroundDetail background={{ ...(draft as Background), name: previewName }} />}
+          {kind === 'feats' && <FeatDetail feat={{ ...(draft as Feat), name: previewName }} />}
         </aside>
       </div>
     </div>

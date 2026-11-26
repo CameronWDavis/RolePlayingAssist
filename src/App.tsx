@@ -117,13 +117,13 @@ function Home() {
           <h2>Compendium</h2>
           <p>
             {counts.spells} spells, {counts.monsters} monsters, {counts.magicItems} magic items, plus {counts.classes} classes, races,
-            equipment and conditions.
+            equipment, conditions and {counts.rules} sections of rules.
           </p>
           <span className="muted small">Search and filter everything</span>
         </Link>
         <Link to="/homebrew" className="feature-card">
           <h2>Homebrew</h2>
-          <p>Make your own magic items, spells, monsters and subclasses, then use them on character sheets and share them as packs.</p>
+          <p>Make your own items, spells, monsters, subclasses, races, backgrounds and feats, then use them on character sheets and share them as packs.</p>
           <span className="muted small">{countHomebrew(hb.data)} created</span>
         </Link>
         <Link to="/dice" className="feature-card">

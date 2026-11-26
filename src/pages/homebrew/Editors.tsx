@@ -1,6 +1,20 @@
 // One form per homebrew type. Each takes a draft and a patch function.
 import { useState } from 'react';
-import { ABILITIES, ABILITY_NAMES, type HomebrewSubclass, type MagicItem, type Monster, type Spell, classById, classes } from '../../data';
+import {
+  ABILITIES,
+  ABILITY_NAMES,
+  type Background,
+  type Feat,
+  type HomebrewSubclass,
+  type MagicItem,
+  type Monster,
+  type Race,
+  type Spell,
+  type Subrace,
+  classById,
+  classes,
+  skills,
+} from '../../data';
 import {
   CREATURE_TYPES,
   CR_XP,
@@ -8,10 +22,11 @@ import {
   RARITIES,
   SIZES,
   SPELL_SCHOOLS,
+  blankSubrace,
   itemSubtitle,
 } from '../../lib/homebrew';
 import { fmtMod, mod } from '../../lib/character';
-import { BlocksEditor, FORMATTING_HINT, Field, ListInput } from './FormParts';
+import { AbilityBonusInputs, BlocksEditor, FORMATTING_HINT, Field, ListInput } from './FormParts';
 
 type Props<T> = { draft: T; set: (patch: Partial<T>) => void };
 
@@ -326,6 +341,187 @@ export function SubclassEditor({ draft, set }: Props<HomebrewSubclass>) {
           descPlaceholder="What the feature does"
         />
       </div>
+    </div>
+  );
+}
+
+// ---------- Race ----------
+
+export function RaceEditor({ draft, set }: Props<Race>) {
+  const setSub = (i: number, patch: Partial<Subrace>) =>
+    set({ subraces: draft.subraces.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+  return (
+    <div className="form-grid">
+      <Field label="Name" wide>
+        <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Emberkin" autoFocus />
+      </Field>
+      <Field label="Size">
+        <select value={draft.size} onChange={(e) => set({ size: e.target.value })}>
+          {SIZES.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </Field>
+      <Field label="Speed (feet)">
+        <input
+          type="number"
+          min={0}
+          max={200}
+          step={5}
+          value={draft.speed}
+          onChange={(e) => set({ speed: Math.min(200, Math.max(0, Math.round(Number(e.target.value) || 0))) })}
+        />
+      </Field>
+      <AbilityBonusInputs value={draft.abilityBonuses} onChange={(abilityBonuses) => set({ abilityBonuses })} />
+      <Field label="Description" hint={FORMATTING_HINT} wide>
+        <textarea
+          rows={4}
+          value={draft.desc}
+          onChange={(e) => set({ desc: e.target.value })}
+          placeholder="Who these people are: age, typical alignment, build, where they live."
+        />
+      </Field>
+      <Field label="Languages" wide>
+        <textarea rows={2} value={draft.languages} onChange={(e) => set({ languages: e.target.value })} />
+      </Field>
+      <div className="wide">
+        <BlocksEditor
+          title="Traits"
+          items={draft.traits}
+          onChange={(traits) => set({ traits })}
+          addLabel="Add trait"
+          namePlaceholder="Trait name, e.g. Darkvision"
+          descPlaceholder="What the trait does"
+        />
+      </div>
+      <div className="wide subrace-list">
+        {draft.subraces.map((s, i) => (
+          <fieldset key={s.id} className="blocks-editor subrace-editor">
+            <legend>Subrace {i + 1}</legend>
+            <div className="block-row-head">
+              <input value={s.name} onChange={(e) => setSub(i, { name: e.target.value })} placeholder="Subrace name" aria-label={`Subrace ${i + 1} name`} />
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => set({ subraces: draft.subraces.filter((_, j) => j !== i) })}
+                aria-label={`Remove ${s.name || 'subrace'}`}
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              value={s.desc}
+              onChange={(e) => setSub(i, { desc: e.target.value })}
+              placeholder="A short description"
+              aria-label={`Subrace ${i + 1} description`}
+            />
+            <AbilityBonusInputs
+              label="Extra ability score increases"
+              value={s.abilityBonuses}
+              onChange={(abilityBonuses) => setSub(i, { abilityBonuses })}
+            />
+            <BlocksEditor
+              title="Subrace traits"
+              items={s.traits}
+              onChange={(traits) => setSub(i, { traits })}
+              addLabel="Add trait"
+              namePlaceholder="Trait name"
+              descPlaceholder="What the trait does"
+            />
+          </fieldset>
+        ))}
+        <button type="button" className="btn small" onClick={() => set({ subraces: [...draft.subraces, blankSubrace()] })}>
+          + Add subrace
+        </button>
+        <p className="field-hint">Optional. A subrace adds its own bonuses and traits on top of the race's.</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Background ----------
+
+export function BackgroundEditor({ draft, set }: Props<Background>) {
+  const feature = draft.feature ?? { name: '', desc: '' };
+  return (
+    <div className="form-grid">
+      <Field label="Name" wide>
+        <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Lighthouse Keeper" autoFocus />
+      </Field>
+      <div className="field wide">
+        <span className="field-label">Skill proficiencies</span>
+        <div className="checks">
+          {skills.map((s) => (
+            <label key={s.id} className="checkbox">
+              <input
+                type="checkbox"
+                checked={draft.skills.includes(s.id)}
+                onChange={(e) => set({ skills: e.target.checked ? [...draft.skills, s.id] : draft.skills.filter((x) => x !== s.id) })}
+              />{' '}
+              {s.name}
+            </label>
+          ))}
+        </div>
+        <span className="field-hint">
+          Backgrounds usually give two. Characters with this background get them automatically.
+          {draft.skills.length > 0 && ` Chosen: ${draft.skills.length}.`}
+        </span>
+      </div>
+      <Field label="Tool proficiencies">
+        <input value={draft.tools} onChange={(e) => set({ tools: e.target.value })} placeholder="e.g. Navigator's tools" />
+      </Field>
+      <Field label="Languages">
+        <input value={draft.languages} onChange={(e) => set({ languages: e.target.value })} placeholder="e.g. One of your choice" />
+      </Field>
+      <Field label="Equipment" wide>
+        <textarea
+          rows={2}
+          value={draft.equipment}
+          onChange={(e) => set({ equipment: e.target.value })}
+          placeholder="e.g. A spyglass, a lantern, common clothes, and a pouch with 10 gp"
+        />
+      </Field>
+      <Field label="Feature name">
+        <input value={feature.name} onChange={(e) => set({ feature: { ...feature, name: e.target.value } })} placeholder="e.g. Keeper of the Light" />
+      </Field>
+      <Field label="Feature description" hint={FORMATTING_HINT} wide>
+        <textarea rows={4} value={feature.desc} onChange={(e) => set({ feature: { ...feature, desc: e.target.value } })} />
+      </Field>
+      <Field label="More details" hint="Optional: personality traits, ideals, bonds and flaws. A table works well." wide>
+        <textarea
+          rows={6}
+          value={draft.desc}
+          onChange={(e) => set({ desc: e.target.value })}
+          placeholder={'| d6 | Personality Trait |\n|---|---|\n| 1 | I count everything, twice. |\n| 2 | I talk to the sea. |'}
+        />
+      </Field>
+    </div>
+  );
+}
+
+// ---------- Feat ----------
+
+export function FeatEditor({ draft, set }: Props<Feat>) {
+  return (
+    <div className="form-grid">
+      <Field label="Name">
+        <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Storm Caller" autoFocus />
+      </Field>
+      <Field label="Prerequisite">
+        <input value={draft.prerequisite} onChange={(e) => set({ prerequisite: e.target.value })} placeholder="e.g. Wisdom 13 or higher" />
+      </Field>
+      <AbilityBonusInputs value={draft.abilityBonuses} onChange={(abilityBonuses) => set({ abilityBonuses })} />
+      <p className="field-hint wide">
+        Only fixed increases are added to the sheet automatically, and never above 20. For "increase one score of your choice",
+        leave these at 0 and raise the score on the character sheet.
+      </p>
+      <Field label="Description" hint={FORMATTING_HINT} wide>
+        <textarea
+          rows={8}
+          value={draft.desc}
+          onChange={(e) => set({ desc: e.target.value })}
+          placeholder={'You gain the following benefits:\n\n- ...\n- ...'}
+        />
+      </Field>
     </div>
   );
 }

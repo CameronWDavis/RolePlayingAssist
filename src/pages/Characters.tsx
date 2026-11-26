@@ -78,7 +78,7 @@ export default function Characters() {
       ) : (
         <div className="card-grid">
           {characters.map((c) => {
-            const d = derive(c, hb.data.subclasses);
+            const d = derive(c, hb.data);
             const hp = c.hpCurrent < 0 ? d.hpMax : c.hpCurrent;
             return (
               <div className="char-card" key={c.id}>

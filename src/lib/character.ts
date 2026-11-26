@@ -2,19 +2,21 @@
 import {
   ABILITIES,
   type Ability,
+  type Background,
   type DndClass,
   type Equipment,
-  type HomebrewSubclass,
+  type Feat,
   type Race,
   type Subclass,
   type Subrace,
-  backgrounds,
+  backgroundById,
   classById,
   equipmentById,
+  featById,
   raceById,
   skills,
 } from '../data';
-import { type HomebrewData, cleanHomebrew, countHomebrew, homebrewUsedBy } from './homebrew';
+import { type HomebrewData, cleanHomebrew, countHomebrew, homebrewUsedBy, isHomebrewId } from './homebrew';
 import { load, save } from './storage';
 
 export interface InventoryItem {
@@ -54,6 +56,8 @@ export interface Character {
   deathSaves: { success: number; fail: number };
   inspiration: boolean;
   conditions: string[];
+  /** Feat ids (SRD or homebrew). */
+  feats: string[];
   slotsUsed: number[];
   spells: string[];
   inventory: InventoryItem[];
@@ -96,6 +100,7 @@ export function createCharacter(): Character {
     deathSaves: { success: 0, fail: 0 },
     inspiration: false,
     conditions: [],
+    feats: [],
     slotsUsed: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     spells: [],
     inventory: [],
@@ -151,7 +156,8 @@ function normalize(raw: unknown): Character {
     id: str(c.id, base.id),
     name: str(c.name, base.name),
     playerName: str(c.playerName, ''),
-    raceId: raceById.has(raceId) ? raceId : base.raceId,
+    // Homebrew races are kept even though this module can't see them; the sheet resolves them.
+    raceId: raceById.has(raceId) || isHomebrewId(raceId) ? raceId : base.raceId,
     subraceId: str(c.subraceId, ''),
     classId: classById.has(classId) ? classId : base.classId,
     // Characters saved before subclasses were selectable showed the SRD one once they reached
@@ -176,6 +182,7 @@ function normalize(raw: unknown): Character {
     deathSaves: { success: int(ds.success, 0, 0, 3), fail: int(ds.fail, 0, 0, 3) },
     inspiration: c.inspiration === true,
     conditions: strList(c.conditions),
+    feats: [...new Set(strList(c.feats))],
     slotsUsed: Array.from({ length: 9 }, (_, i) => int(slots[i], 0, 0, 99)),
     spells: strList(c.spells),
     inventory: cleanInventory(c.inventory),
@@ -238,6 +245,8 @@ export interface Derived {
   subrace?: Subrace;
   cls?: DndClass;
   subclass?: Subclass & { homebrew?: boolean };
+  background?: Background;
+  feats: Feat[];
   armor?: Equipment;
   scores: Record<Ability, number>;
   mods: Record<Ability, number>;
@@ -257,22 +266,34 @@ export interface Derived {
   spellAttack: number | null;
 }
 
-export function derive(c: Character, homebrewSubclasses: HomebrewSubclass[] = []): Derived {
-  const race = raceById.get(c.raceId);
+/**
+ * Works out the character's numbers. Pass the user's homebrew so homebrew races, backgrounds,
+ * feats and subclasses count; a deleted homebrew choice simply adds nothing.
+ */
+export function derive(c: Character, hb: Partial<HomebrewData> = {}): Derived {
+  const race = raceById.get(c.raceId) ?? hb.races?.find((r) => r.id === c.raceId);
   const subrace = race?.subraces.find((s) => s.id === c.subraceId);
   const cls = classById.get(c.classId);
   const subclass =
     c.subclassId === 'srd'
       ? cls?.subclasses[0]
-      : homebrewSubclasses.find((s) => s.id === c.subclassId && s.classId === c.classId);
+      : hb.subclasses?.find((s) => s.id === c.subclassId && s.classId === c.classId);
+  const background = backgroundById.get(c.backgroundId) ?? hb.backgrounds?.find((b) => b.id === c.backgroundId);
+  const feats = c.feats.flatMap((id) => featById.get(id) ?? hb.feats?.find((f) => f.id === id) ?? []);
   const armor = c.armorId ? equipmentById.get(c.armorId) : undefined;
   const level = Math.min(20, Math.max(1, c.level));
 
   const scores = {} as Record<Ability, number>;
   const mods = {} as Record<Ability, number>;
   for (const a of ABILITIES) {
-    scores[a] = (c.baseScores[a] ?? 10) + (race?.abilityBonuses[a] ?? 0) + (subrace?.abilityBonuses[a] ?? 0);
-    mods[a] = mod(scores[a]);
+    let score = (c.baseScores[a] ?? 10) + (race?.abilityBonuses[a] ?? 0) + (subrace?.abilityBonuses[a] ?? 0);
+    // Feats can't raise a score above 20 (but never lower one that's already higher).
+    for (const f of feats) {
+      const bonus = f.abilityBonuses[a] ?? 0;
+      score = bonus > 0 ? Math.max(score, Math.min(20, score + bonus)) : score + bonus;
+    }
+    scores[a] = score;
+    mods[a] = mod(score);
   }
 
   const prof = cls?.levels[level - 1]?.profBonus ?? profBonusFor(level);
@@ -310,7 +331,7 @@ export function derive(c: Character, homebrewSubclasses: HomebrewSubclass[] = []
     saves[a] = { value: mods[a] + (proficient ? prof : 0), proficient };
   }
 
-  const bgSkills = backgrounds.find((b) => b.id === c.backgroundId)?.skills ?? [];
+  const bgSkills = background?.skills ?? [];
   const skillRows = skills.map((s) => {
     const fromBackground = bgSkills.includes(s.id);
     const p: 0 | 1 | 2 = c.expertise.includes(s.id) ? 2 : c.skillProfs.includes(s.id) || fromBackground ? 1 : 0;
@@ -330,6 +351,8 @@ export function derive(c: Character, homebrewSubclasses: HomebrewSubclass[] = []
     subrace,
     cls,
     subclass,
+    background,
+    feats,
     armor,
     scores,
     mods,

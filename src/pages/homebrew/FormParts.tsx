@@ -1,6 +1,6 @@
 // Small form building blocks shared by the homebrew editors.
 import { useState, type ReactNode } from 'react';
-import type { Feature, NamedBlock } from '../../data';
+import { ABILITIES, ABILITY_NAMES, type Ability, type Feature, type NamedBlock } from '../../data';
 
 export function Field({ label, hint, children, wide = false }: { label: string; hint?: string; children: ReactNode; wide?: boolean }) {
   return (
@@ -105,4 +105,42 @@ export function BlocksEditor<T extends Block>({
   );
 }
 
-export const FORMATTING_HINT = 'Supports **bold**, _italic_, "- " bullet lists and | pipe | tables |. Leave a blank line between paragraphs.';
+export const FORMATTING_HINT = 'Supports **bold**, *italic*, "## " headings, "- " bullet lists and | pipe | tables |. Leave a blank line between paragraphs.';
+
+/** Six small number boxes for ability score bonuses (race, subrace or feat). Zero means none. */
+export function AbilityBonusInputs({
+  value,
+  onChange,
+  label = 'Ability score increases',
+}: {
+  value: Partial<Record<Ability, number>>;
+  onChange: (v: Partial<Record<Ability, number>>) => void;
+  label?: string;
+}) {
+  return (
+    <div className="field wide">
+      <span className="field-label">{label}</span>
+      <div className="ability-inputs">
+        {ABILITIES.map((a) => (
+          <label key={a}>
+            {a.toUpperCase()}
+            <input
+              type="number"
+              min={-10}
+              max={10}
+              value={value[a] ?? 0}
+              onChange={(e) => {
+                const n = Math.min(10, Math.max(-10, Math.round(Number(e.target.value) || 0)));
+                const next = { ...value };
+                if (n) next[a] = n;
+                else delete next[a];
+                onChange(next);
+              }}
+              aria-label={`${ABILITY_NAMES[a]} bonus`}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}

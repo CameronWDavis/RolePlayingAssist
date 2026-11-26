@@ -3,27 +3,38 @@ import { useHomebrew } from '../components/HomebrewStore';
 import type { HomebrewData } from '../lib/homebrew';
 import { Link, NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
+  backgrounds,
   classes,
   conditions,
   equipment,
+  feats,
   races,
+  skillById,
+  type Background,
   type Condition,
   type DndClass,
   type Equipment,
+  type Feat,
   type MagicItem,
   type Monster,
   type Race,
+  type Rule,
   type Spell,
 } from '../data';
 import { magicItems, monsters, spells } from '../data/library';
+import { rules } from '../data/rules';
 import {
+  BackgroundDetail,
   ClassDetail,
   ConditionDetail,
   EquipmentDetail,
+  FeatDetail,
   MagicItemDetail,
   MonsterDetail,
   RaceDetail,
+  RuleDetail,
   SpellDetail,
+  bonusText,
   ordinal,
 } from './compendium/Details';
 import { DetailActions } from './compendium/DetailActions';
@@ -48,6 +59,8 @@ interface Category<T extends Base> {
   badge?: (item: T) => ReactNode;
   filters: Filter<T>[];
   sorts?: { key: string; label: string; compare: (a: T, b: T) => number }[];
+  /** Extra text the search box looks through besides the name (e.g. the full rules text). */
+  searchText?: (item: T) => string;
   detail: (item: T) => ReactNode;
 }
 
@@ -55,7 +68,19 @@ const uniq = (arr: string[]) => [...new Set(arr)].sort().map((v) => ({ value: v,
 const define = <T extends Base>(c: Category<T>) => c as unknown as Category<Base>;
 const byName = (a: Base, b: Base) => a.name.localeCompare(b.name);
 
-const RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary', 'Artifact', 'Varies'];
+/** A short plain-text excerpt around a search hit, for the result list. */
+function snippet(text: string, at: number, len: number) {
+  const start = Math.max(0, at - 30);
+  const end = Math.min(text.length, at + len + 50);
+  const plain = text
+    .slice(start, end)
+    .replace(/[#*_|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${start > 0 ? '…' : ''}${plain}${end < text.length ? '…' : ''}`;
+}
+
+const RARITY_ORDER =['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary', 'Artifact', 'Varies'];
 
 const sourceFilter = <T extends Base & { homebrew?: boolean }>(): Filter<T> => ({
   key: 'source',
@@ -193,10 +218,29 @@ function buildCategories(hb: HomebrewData): Category<Base>[] {
   define<Race>({
     id: 'races',
     label: 'Races',
-    items: races,
+    items: [...races, ...[...hb.races].sort(byName)],
     meta: (r) => `${r.size} · ${r.speed} ft.${r.subraces.length ? ` · ${r.subraces.map((s) => s.name).join(', ')}` : ''}`,
-    filters: [],
+    badge: hbTag,
+    filters: hb.races.length ? [sourceFilter<Race>()] : [],
     detail: (r) => <RaceDetail race={r} />,
+  }),
+  define<Background>({
+    id: 'backgrounds',
+    label: 'Backgrounds',
+    items: [...backgrounds, ...hb.backgrounds].sort(byName),
+    meta: (b) => b.skills.map((s) => skillById.get(s)?.name ?? s).join(', ') || 'Background',
+    badge: hbTag,
+    filters: hb.backgrounds.length ? [sourceFilter<Background>()] : [],
+    detail: (b) => <BackgroundDetail background={b} />,
+  }),
+  define<Feat>({
+    id: 'feats',
+    label: 'Feats',
+    items: [...feats, ...hb.feats].sort(byName),
+    meta: (f) => [f.prerequisite && `Requires ${f.prerequisite}`, bonusText(f.abilityBonuses)].filter(Boolean).join(' · ') || 'Feat',
+    badge: hbTag,
+    filters: hb.feats.length ? [sourceFilter<Feat>()] : [],
+    detail: (f) => <FeatDetail feat={f} />,
   }),
   define<Condition>({
     id: 'conditions',
@@ -204,7 +248,28 @@ function buildCategories(hb: HomebrewData): Category<Base>[] {
     items: conditions,
     meta: () => 'Condition',
     filters: [],
+    searchText: (c) => c.desc,
     detail: (c) => <ConditionDetail condition={c} />,
+  }),
+  define<Rule>({
+    id: 'rules',
+    label: 'Rules',
+    items: rules,
+    meta: (r) => r.chapter,
+    filters: [
+      {
+        key: 'chapter',
+        label: 'Chapter',
+        options: [...new Set(rules.map((r) => r.chapter))].map((c) => ({ value: c, label: c })),
+        test: (r, v) => r.chapter === v,
+      },
+    ],
+    sorts: [
+      { key: 'order', label: 'Book order', compare: (a, b) => a.order - b.order },
+      { key: 'name', label: 'Name', compare: byName },
+    ],
+    searchText: (r) => r.desc,
+    detail: (r) => <RuleDetail rule={r} />,
   }),
   ];
 }
@@ -237,16 +302,31 @@ function CategoryBrowser({ cat, selectedId }: { cat: Category<Base>; selectedId?
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [sort, setSort] = useState(cat.sorts?.[0]?.key ?? 'name');
 
-  const results = useMemo(() => {
+  // Lower-cased body text for categories that search more than names (rules, conditions).
+  const bodies = useMemo(
+    () => (cat.searchText ? new Map(cat.items.map((item) => [item.id, cat.searchText!(item).toLowerCase()])) : null),
+    [cat],
+  );
+
+  const { results, snippets } = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const snippets = new Map<string, string>();
+    const nameHit = (item: Base) => !q || item.name.toLowerCase().includes(q);
     let list = cat.items.filter((item) => {
-      if (q && !item.name.toLowerCase().includes(q)) return false;
+      if (!nameHit(item)) {
+        const body = bodies?.get(item.id);
+        const at = body ? body.indexOf(q) : -1;
+        if (at < 0) return false;
+        snippets.set(item.id, snippet(cat.searchText!(item), at, q.length));
+      }
       return cat.filters.every((f) => !filters[f.key] || f.test(item, filters[f.key]));
     });
     const sorter = cat.sorts?.find((s) => s.key === sort);
     if (sorter) list = [...list].sort(sorter.compare);
-    return list;
-  }, [cat, query, filters, sort]);
+    // Entries whose name matches come before ones that only mention the words.
+    if (snippets.size) list = [...list.filter((x) => !snippets.has(x.id)), ...list.filter((x) => snippets.has(x.id))];
+    return { results: list, snippets };
+  }, [cat, bodies, query, filters, sort]);
 
   const selected = selectedId ? cat.items.find((i) => i.id === selectedId) : undefined;
   const activeFilters = Object.values(filters).filter(Boolean).length;
@@ -312,7 +392,7 @@ function CategoryBrowser({ cat, selectedId }: { cat: Category<Base>; selectedId?
                   {item.name}
                   {cat.badge?.(item)}
                 </span>
-                <span className="r-meta">{cat.meta(item)}</span>
+                <span className="r-meta">{snippets.get(item.id) ?? cat.meta(item)}</span>
               </Link>
             </li>
           ))}

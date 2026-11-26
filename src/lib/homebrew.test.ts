@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   blankMonster,
+  blankRace,
   blankSpell,
+  cleanEntry,
   cleanHomebrew,
   countHomebrew,
   emptyHomebrew,
@@ -74,6 +76,59 @@ describe('cleanHomebrew', () => {
     const out = cleanHomebrew({ subclasses: [{ name: 'S', classId: 'wizard', features: [{ name: 'F', level: 99 }, { name: 'G', level: -3 }] }] });
     expect(out.subclasses[0].features.map((f) => f.level)).toEqual([20, 1]);
   });
+
+  it('cleans races: ability bonuses, speed, empty traits and unnamed subraces', () => {
+    const out = cleanHomebrew({
+      races: [
+        {
+          name: 'Emberkin',
+          speed: 999,
+          abilityBonuses: { str: 2, cha: 1.6, luck: 5, dex: 0, wis: 'lots', int: -40 },
+          traits: [{ name: 'Darkvision', desc: 'See in the dark.' }, { name: '', desc: '  ' }],
+          subraces: [{ id: 'ash', name: 'Ashborn', abilityBonuses: { con: 1 } }, { name: '' }, { id: 'bad id!', name: 'Cinder' }],
+        },
+      ],
+    });
+    const race = out.races[0];
+    expect(race.speed).toBe(200);
+    expect(race.abilityBonuses).toEqual({ str: 2, cha: 2, int: -10 });
+    expect(race.traits.map((t) => t.name)).toEqual(['Darkvision']);
+    expect(race.subraces.map((s) => s.name)).toEqual(['Ashborn', 'Cinder']);
+    expect(race.subraces[0]).toMatchObject({ id: 'ash', abilityBonuses: { con: 1 } });
+    expect(race.subraces[1].id).toMatch(/^sub-/);
+    expect(race.homebrew).toBe(true);
+  });
+
+  it('cleans backgrounds: only real skills, once each, and no empty feature', () => {
+    const out = cleanHomebrew({
+      backgrounds: [
+        { name: 'Keeper', skills: ['perception', 'perception', 'flying', 3], feature: { name: '', desc: '' } },
+        { name: 'Sailor', skills: ['athletics'], feature: { name: 'Ship Hand', desc: 'Free passage.' } },
+      ],
+    });
+    expect(out.backgrounds[0]).toMatchObject({ skills: ['perception'], feature: null });
+    expect(out.backgrounds[1].feature).toEqual({ name: 'Ship Hand', desc: 'Free passage.' });
+  });
+
+  it('cleans feats', () => {
+    const out = cleanHomebrew({ feats: [{ name: 'Storm Caller', prerequisite: 7, abilityBonuses: { wis: 1 }, desc: 'Zap.' }] });
+    expect(out.feats[0]).toMatchObject({ name: 'Storm Caller', prerequisite: '', abilityBonuses: { wis: 1 }, desc: 'Zap.', homebrew: true });
+  });
+
+  it('reads packs saved before races, backgrounds and feats existed', () => {
+    const old = { format: 'grimoire-homebrew', version: 1, spells: [{ name: 'Old Spell' }], magicItems: [], monsters: [], subclasses: [] };
+    const data = parsePack(JSON.stringify(old));
+    expect(data.spells.map((s) => s.name)).toEqual(['Old Spell']);
+    expect(data).toMatchObject({ races: [], backgrounds: [], feats: [] });
+  });
+});
+
+describe('cleanEntry', () => {
+  it('cleans a single editor draft and returns nothing for an unnamed one', () => {
+    const race = cleanEntry('races', { ...blankRace(), name: 'Gnoll-kin', traits: [{ name: '', desc: '' }] });
+    expect(race).toMatchObject({ name: 'Gnoll-kin', traits: [] });
+    expect(cleanEntry('feats', { name: '  ' })).toBeUndefined();
+  });
 });
 
 describe('itemSubtitle', () => {
@@ -83,16 +138,22 @@ describe('itemSubtitle', () => {
 });
 
 describe('homebrewUsedBy', () => {
-  it('collects only referenced spells, magic items and the chosen subclass', () => {
+  it('collects only the referenced spells, items, subclass, race, background and feats', () => {
     const data = cleanHomebrew({
       spells: [{ id: 'hb-s1', name: 'Used' }, { id: 'hb-s2', name: 'Unused' }],
       magicItems: [{ id: 'hb-m1', name: 'Ring' }, { id: 'hb-m2', name: 'Other' }],
       subclasses: [{ id: 'hb-c1', name: 'Embers', classId: 'wizard' }],
       monsters: [{ id: 'hb-x1', name: 'Never bundled' }],
+      races: [{ id: 'hb-r1', name: 'Emberkin' }, { id: 'hb-r2', name: 'Other race' }],
+      backgrounds: [{ id: 'hb-b1', name: 'Keeper' }],
+      feats: [{ id: 'hb-f1', name: 'Storm Caller' }, { id: 'hb-f2', name: 'Unused feat' }],
     });
     const used = homebrewUsedBy(
       {
         subclassId: 'hb-c1',
+        raceId: 'hb-r1',
+        backgroundId: 'hb-b1',
+        feats: ['hb-f1', 'grappler'],
         spells: ['hb-s1', 'fireball'],
         // An equipment item with a homebrew-looking id must not pull in a magic item.
         inventory: [
@@ -106,5 +167,8 @@ describe('homebrewUsedBy', () => {
     expect(used.magicItems.map((m) => m.name)).toEqual(['Ring']);
     expect(used.subclasses.map((s) => s.name)).toEqual(['Embers']);
     expect(used.monsters).toEqual([]);
+    expect(used.races.map((r) => r.name)).toEqual(['Emberkin']);
+    expect(used.backgrounds.map((b) => b.name)).toEqual(['Keeper']);
+    expect(used.feats.map((f) => f.name)).toEqual(['Storm Caller']);
   });
 });

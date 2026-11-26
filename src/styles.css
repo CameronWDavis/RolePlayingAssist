@@ -218,7 +218,15 @@ h3.rule { color: var(--accent-strong); border-bottom: 1px solid var(--accent); p
 .inline-roll { background: none; border: none; border-bottom: 1px dashed var(--accent); color: var(--accent-strong); cursor: pointer; padding: 0; font-weight: 600; }
 .inline-roll:hover { border-bottom-style: solid; }
 
-.rich ul { padding-left: 1.25rem; margin: 0 0 0.75em; }
+.rich ul, .rich ol { padding-left: 1.25rem; margin: 0 0 0.75em; }
+.rich li + li { margin-top: 0.2em; }
+.rich-heading { color: var(--accent-strong); margin: 1.25em 0 0.4em; }
+h3.rich-heading { border-bottom: 1px solid var(--border); padding-bottom: 0.2rem; }
+h5.rich-heading { font-size: 0.98rem; }
+h6.rich-heading { font-size: 0.9rem; font-style: italic; }
+.rich > .rich-heading:first-child { margin-top: 0.5em; }
+/* Long rules sections read better at a comfortable line length. */
+.rule-text .rich { max-width: 72ch; line-height: 1.6; }
 .table-wrap { overflow-x: auto; margin: 0.5rem 0 1rem; }
 table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
 th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -458,6 +466,11 @@ button.prof-dot:hover { border-color: var(--accent); }
 .cat-tabs button:hover { color: var(--text); background: var(--surface); }
 .cat-tabs button.on { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
 .empty-state.compact { padding: 1.5rem 1rem; }
+.subrace-list { display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+.subrace-editor { width: 100%; }
+.subrace-editor > textarea, .subrace-editor > .block-row-head { width: 100%; }
+.subrace-editor > textarea { resize: vertical; }
+.subrace-editor .field { width: 100%; }
 .hb-list { list-style: none; margin: 0; padding: 0; }
 .hb-list li { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .hb-list li > a { display: flex; flex-direction: column; color: var(--text); text-decoration: none !important; }

@@ -2,7 +2,7 @@
 // Source: System Reference Document 5.1 by Wizards of the Coast, CC-BY-4.0.
 //
 // This module holds the small data every page needs (classes, races, equipment...).
-// The big lists (spells, monsters, magic items) live in ./library so they only download
+// The big lists (spells, monsters, magic items) and the rules text live in ./library and ./rules so they only download
 // on pages that use them. Don't import ./library from code that loads on every page.
 import equipmentJson from './equipment.json';
 import conditionsJson from './conditions.json';
@@ -10,6 +10,7 @@ import racesJson from './races.json';
 import classesJson from './classes.json';
 import skillsJson from './skills.json';
 import backgroundsJson from './backgrounds.json';
+import featsJson from './feats.json';
 
 export type Ability = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export const ABILITIES: Ability[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
@@ -131,6 +132,7 @@ export interface Race {
   languages: string;
   traits: NamedBlock[];
   subraces: Subrace[];
+  homebrew?: boolean;
 }
 
 export interface Feature extends NamedBlock {
@@ -182,8 +184,35 @@ export interface Skill {
 export interface Background {
   id: string;
   name: string;
+  /** Skill ids the background grants. */
   skills: string[];
+  tools: string;
+  languages: string;
+  equipment: string;
   feature: NamedBlock | null;
+  /** Extra text, such as the suggested personality tables. */
+  desc: string;
+  homebrew?: boolean;
+}
+
+export interface Feat {
+  id: string;
+  name: string;
+  prerequisite: string;
+  /** Fixed ability score increases (a feat can't raise a score above 20). */
+  abilityBonuses: Partial<Record<Ability, number>>;
+  desc: string;
+  homebrew?: boolean;
+}
+
+/** One section of the SRD's rules chapters (Combat, Adventuring, Spellcasting...). */
+export interface Rule {
+  id: string;
+  name: string;
+  chapter: string;
+  /** Position in the SRD, for reading in book order. */
+  order: number;
+  desc: string;
 }
 
 export const equipment = equipmentJson as Equipment[];
@@ -192,9 +221,12 @@ export const races = racesJson as Race[];
 export const classes = classesJson as DndClass[];
 export const skills = skillsJson as Skill[];
 export const backgrounds = backgroundsJson as Background[];
+export const feats = featsJson as Feat[];
 
 export const byId = <T extends { id: string }>(arr: T[]) => new Map(arr.map((x) => [x.id, x]));
 export const equipmentById = byId(equipment);
 export const raceById = byId(races);
 export const classById = byId(classes);
 export const skillById = byId(skills);
+export const backgroundById = byId(backgrounds);
+export const featById = byId(feats);

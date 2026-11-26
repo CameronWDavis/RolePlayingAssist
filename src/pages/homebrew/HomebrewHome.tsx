@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useHomebrew } from '../../components/HomebrewStore';
-import { classById, classes } from '../../data';
+import { classById, classes, skillById } from '../../data';
 import {
   type HomebrewData,
   type HomebrewKind,
@@ -45,6 +45,16 @@ function rowsFor(kind: HomebrewKind, data: HomebrewData): Row[] {
       return data.subclasses
         .map((s) => ({ id: s.id, name: s.name, meta: `${classById.get(s.classId)?.name ?? s.classId} · ${s.features.length} features`, classId: s.classId }))
         .sort(byName);
+    case 'races':
+      return data.races
+        .map((r) => ({ id: r.id, name: r.name, meta: `${r.size} · ${r.speed} ft.${r.subraces.length ? ` · ${r.subraces.length} subraces` : ''}` }))
+        .sort(byName);
+    case 'backgrounds':
+      return data.backgrounds
+        .map((b) => ({ id: b.id, name: b.name, meta: b.skills.map((s) => skillById.get(s)?.name ?? s).join(', ') || 'No skills' }))
+        .sort(byName);
+    case 'feats':
+      return data.feats.map((f) => ({ id: f.id, name: f.name, meta: f.prerequisite ? `Requires ${f.prerequisite}` : 'No prerequisite' })).sort(byName);
   }
 }
 
@@ -98,8 +108,8 @@ export default function HomebrewHome() {
         <div>
           <h1>Homebrew</h1>
           <p className="muted">
-            Make your own magic items, spells, monsters and subclasses. They show up in the compendium and on character sheets next to the
-            official rules. Saved in this browser. Export a pack to back it up or share it with your table.
+            Make your own magic items, spells, monsters, subclasses, races, backgrounds and feats. They show up in the compendium and on
+            character sheets next to the official rules. Saved in this browser. Export a pack to back it up or share it with your table.
           </p>
         </div>
         <div className="actions">

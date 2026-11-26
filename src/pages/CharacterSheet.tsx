@@ -69,7 +69,7 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
   const hb = useHomebrew();
   const location = useLocation();
   const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
-  const d = derive(c, hb.data.subclasses);
+  const d = derive(c, hb.data);
   const { roll } = useDice();
   const srdSubclass = d.cls?.subclasses[0];
   const homebrewSubclasses = hb.subclassesFor(c.classId);
@@ -180,11 +180,17 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
           <select
             value={c.raceId}
             onChange={(e) => {
-              const r = races.find((x) => x.id === e.target.value);
+              const r = races.find((x) => x.id === e.target.value) ?? hb.data.races.find((x) => x.id === e.target.value);
               set({ raceId: e.target.value, subraceId: r?.subraces[0]?.id ?? '' });
             }}
           >
             {races.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            {hb.data.races.length > 0 && (
+              <optgroup label="Homebrew">
+                {hb.data.races.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+            )}
+            {!d.race && <option value={c.raceId}>(deleted homebrew)</option>}
           </select>
         </label>
         {d.race && d.race.subraces.length > 0 && (
@@ -234,6 +240,12 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
           <select value={c.backgroundId} onChange={(e) => set({ backgroundId: e.target.value })}>
             <option value="">Custom / none</option>
             {backgrounds.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {hb.data.backgrounds.length > 0 && (
+              <optgroup label="Homebrew">
+                {hb.data.backgrounds.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </optgroup>
+            )}
+            {c.backgroundId && !d.background && <option value={c.backgroundId}>(deleted homebrew)</option>}
           </select>
         </label>
         <label>
@@ -262,6 +274,8 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
         <div className="abilities">
           {ABILITIES.map((a) => {
             const bonus = (d.race?.abilityBonuses[a] ?? 0) + (d.subrace?.abilityBonuses[a] ?? 0);
+            // Whatever isn't base or race came from feats (after their cap at 20).
+            const featBonus = d.scores[a] - c.baseScores[a] - bonus;
             return (
               <div className="ability" key={a}>
                 <div className="ability-name">{ABILITY_NAMES[a]}</div>
@@ -285,6 +299,7 @@ function Sheet({ c, set, onDelete }: { c: Character; set: SetCharacter; onDelete
                     aria-label={`${ABILITY_NAMES[a]} base score`}
                   />
                   {bonus !== 0 && <span className="muted small">{fmtMod(bonus)} race</span>}
+                  {featBonus !== 0 && <span className="muted small">{fmtMod(featBonus)} feat</span>}
                 </div>
               </div>
             );

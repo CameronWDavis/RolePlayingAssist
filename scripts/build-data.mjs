@@ -225,12 +225,68 @@ write(
 
 // ---------- Skills & backgrounds ----------
 write('skills', read('Skills').map((s) => ({ id: s.index, name: s.name, ability: s.ability_score.index, desc: joinDesc(s.desc) })));
+const optionText = (o) => o.string ?? o.desc ?? '';
+const rollTable = (title, die, list) =>
+  list?.from?.options?.length
+    ? [`| ${die} | ${title} |`, '|---|---|', ...list.from.options.map((o, i) => `| ${i + 1} | ${optionText(o)} |`)].join('\n')
+    : '';
 write(
   'backgrounds',
-  read('Backgrounds').map((b) => ({
-    id: b.index,
-    name: b.name,
-    skills: (b.starting_proficiencies || []).filter((p) => p.index.startsWith('skill-')).map((p) => p.index.replace('skill-', '')),
-    feature: b.feature ? { name: b.feature.name, desc: joinDesc(b.feature.desc) } : null,
+  read('Backgrounds').map((b) => {
+    const profs = b.starting_proficiencies || [];
+    const choice = (o) => (o?.choose ? `${o.choose === 1 ? 'One' : o.choose === 2 ? 'Two' : o.choose} of your choice` : '');
+    const tables = [
+      rollTable('Personality Trait', 'd8', b.personality_traits),
+      rollTable('Ideal', 'd6', b.ideals),
+      rollTable('Bond', 'd6', b.bonds),
+      rollTable('Flaw', 'd6', b.flaws),
+    ].filter(Boolean);
+    return {
+      id: b.index,
+      name: b.name,
+      skills: profs.filter((p) => p.index.startsWith('skill-')).map((p) => p.index.replace('skill-', '')),
+      tools: profs.filter((p) => !p.index.startsWith('skill-')).map((p) => p.name).join(', '),
+      languages: choice(b.language_options),
+      equipment: [
+        ...(b.starting_equipment || []).map((e) => (e.quantity > 1 ? `${e.quantity} × ${e.equipment.name}` : e.equipment.name)),
+        ...(b.starting_equipment_options || []).map((o) => `${o.choose === 1 ? 'one' : o.choose} from ${(o.from?.equipment_category?.name ?? 'a list').toLowerCase()}`),
+        b.starting_gold ? `${b.starting_gold.quantity} ${b.starting_gold.unit}` : '',
+      ]
+        .filter(Boolean)
+        .join('; '),
+      feature: b.feature ? { name: b.feature.name, desc: joinDesc(b.feature.desc) } : null,
+      desc: tables.length ? `### Suggested Characteristics\n\n${tables.join('\n\n')}` : '',
+    };
+  }),
+);
+
+// ---------- Feats ----------
+const ABILITY_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+write(
+  'feats',
+  read('Feats').map((f) => ({
+    id: f.index,
+    name: f.name,
+    prerequisite: (f.prerequisites || [])
+      .map((p) => (p.ability_score ? `${ABILITY_NAMES[p.ability_score.index]} ${p.minimum_score} or higher` : ''))
+      .filter(Boolean)
+      .join(', '),
+    abilityBonuses: {},
+    desc: joinDesc(f.desc),
   })),
+);
+
+// ---------- Rules (the SRD's rules chapters, one entry per section) ----------
+const ruleSections = Object.fromEntries(read('Rule-Sections').map((s) => [s.index, s]));
+let order = 0;
+write(
+  'rules',
+  read('Rules').flatMap((chapter) =>
+    chapter.subsections.map((sub) => {
+      const sec = ruleSections[sub.index];
+      // Each section starts with its own title as a heading; the page shows the title already.
+      const desc = (sec?.desc ?? '').replace(/^#+ [^\n]*\n+/, '');
+      return { id: sub.index, name: sec?.name ?? sub.name, chapter: chapter.name, order: order++, desc };
+    }),
+  ),
 );
